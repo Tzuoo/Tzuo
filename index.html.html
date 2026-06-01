@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>539 查表工具</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0f1117;--sf:#1a1d27;--sf2:#22263a;--bd:#2e3450;
+  --ac:#4f7cff;--ac2:#7c5fff;--tx:#e8eaf6;--mu:#7880a0;
+  --c2:#60a5fa;--c3:#34d399;--c4:#fbbf24;--c5:#f87171;--c6:#c084fc;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{font-family:'Noto Sans TC',sans-serif;background:var(--bg);color:var(--tx);min-height:100vh;padding-bottom:60px}
+
+header{background:#0f1117;border-bottom:1px solid var(--bd);padding:14px 16px 0;position:sticky;top:0;z-index:100}
+h1{font-size:17px;font-weight:700;letter-spacing:2px;background:linear-gradient(90deg,var(--ac),var(--ac2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;text-align:center;margin-bottom:10px}
+.ptabs{display:flex;gap:8px;justify-content:center;padding-bottom:0}
+.ptab{padding:7px 28px;border-radius:8px 8px 0 0;font-size:13px;font-weight:500;color:var(--mu);cursor:pointer;border:1px solid transparent;border-bottom:none;transition:all .2s;background:transparent}
+.ptab.active{background:var(--sf);color:var(--tx);border-color:var(--bd)}
+
+.page{display:none;padding:14px;max-width:480px;margin:0 auto}
+.page.active{display:block}
+
+/* card */
+.card{background:var(--sf);border:1px solid var(--bd);border-radius:14px;overflow:hidden;margin-bottom:12px}
+.ch{padding:9px 14px;background:var(--sf2);border-bottom:1px solid var(--bd);font-size:11px;letter-spacing:1.2px;color:var(--mu);text-transform:uppercase}
+.cb{padding:14px}
+
+/* ctrl */
+.cbar{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:12px}
+.cg{display:flex;align-items:center;background:var(--sf2);border:1px solid var(--bd);border-radius:20px;overflow:hidden}
+.cl{font-size:11px;color:var(--mu);padding:0 8px;white-space:nowrap}
+.cb2{width:32px;height:32px;border:none;background:transparent;color:var(--tx);font-size:17px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.cb2:active{background:rgba(79,124,255,.2)}
+.cv{font-family:'DM Mono',monospace;font-size:14px;font-weight:500;color:var(--ac);min-width:22px;text-align:center}
+
+/* big number picker */
+.num-picker{display:flex;flex-direction:column;align-items:center;gap:10px;padding:10px 0}
+.picker-display{font-family:'DM Mono',monospace;font-size:64px;font-weight:700;color:var(--tx);line-height:1;text-align:center;letter-spacing:-2px}
+.picker-display .pd-label{font-size:12px;font-family:'Noto Sans TC',sans-serif;color:var(--mu);letter-spacing:1px;margin-top:4px;font-weight:400}
+.picker-btns{display:grid;grid-template-columns:repeat(5,1fr);gap:7px;width:100%}
+.pnum{height:44px;border-radius:10px;border:1px solid var(--bd);background:var(--sf2);color:var(--mu);font-family:'DM Mono',monospace;font-size:16px;font-weight:500;cursor:pointer;transition:all .15s;display:flex;align-items:center;justify-content:center}
+.pnum.sel{background:var(--ac);border-color:var(--ac);color:#fff;box-shadow:0 0 10px rgba(79,124,255,.35)}
+.picker-hint{font-size:12px;color:var(--mu);text-align:center}
+
+/* star results */
+.scards{display:grid;gap:1px;background:var(--bd)}
+.scard{background:var(--sf);padding:13px 14px;display:flex;align-items:center;justify-content:space-between}
+.sname{display:flex;align-items:center;gap:10px}
+.sdot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.slbl{font-size:15px;font-weight:500}
+.sfml{font-size:12px;color:var(--mu);font-family:'DM Mono',monospace;margin-top:2px}
+.scnt{font-family:'DM Mono',monospace;font-size:28px;font-weight:500}
+.sunit{font-size:12px;color:var(--mu);text-align:right;margin-top:2px}
+.stot-row{padding:10px 14px;background:var(--sf2);border-top:1px solid var(--bd);display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--mu)}
+.stot-row span{font-family:'DM Mono',monospace;color:var(--c4);font-weight:500;font-size:13px}
+.empty{padding:18px;color:var(--mu);font-size:13px;text-align:center}
+
+/* price */
+.price-section{border-top:1px solid var(--bd)}
+.price-row{display:flex;align-items:center;gap:10px;padding:10px 14px}
+.price-label{font-size:12px;color:var(--mu);white-space:nowrap}
+.price-disp{font-family:'DM Mono',monospace;font-size:17px;font-weight:500;color:var(--tx);background:var(--sf2);border:1px solid var(--bd);border-radius:8px;padding:6px 12px;flex:1;text-align:right}
+.price-result{padding:0 14px 10px;font-size:12px;color:var(--mu);line-height:1.8}
+.price-result b{color:var(--c4);font-family:'DM Mono',monospace;font-size:14px;font-weight:500}
+.keypad{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding:10px 14px 14px}
+.key{height:40px;border-radius:9px;border:1px solid var(--bd);background:var(--sf2);color:var(--tx);font-family:'DM Mono',monospace;font-size:15px;font-weight:500;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .1s}
+.key:active{background:var(--ac);border-color:var(--ac);color:#fff}
+.key.red{color:var(--c5)}
+.key.blue{background:var(--ac);border-color:var(--ac);color:#fff}
+
+/* pillar page */
+.mtog{display:flex;gap:6px}
+.mbtn{padding:5px 12px;border-radius:12px;border:1px solid var(--bd);background:transparent;color:var(--mu);font-family:'Noto Sans TC',sans-serif;font-size:12px;cursor:pointer;transition:all .15s}
+.mbtn.active{background:var(--sf2);color:var(--tx);border-color:var(--ac)}
+.slrows{display:flex;flex-direction:column;gap:10px}
+.slrow{display:flex;align-items:center;gap:9px}
+.plbl{font-size:12px;color:var(--mu);width:28px;flex-shrink:0;font-family:'DM Mono',monospace}
+.slrow input[type=range]{flex:1;-webkit-appearance:none;height:4px;border-radius:2px;background:var(--bd);outline:none}
+.slrow input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;background:var(--ac);cursor:pointer;box-shadow:0 0 0 3px rgba(79,124,255,.22)}
+.sv{font-family:'DM Mono',monospace;font-size:17px;font-weight:500;width:22px;text-align:center;flex-shrink:0}
+.sv.z{color:var(--mu)}.sv.nz{color:var(--tx)}
+.brow{display:flex;align-items:center;gap:6px}
+.nbtns{display:flex;gap:4px;flex:1;flex-wrap:wrap}
+.nbtn{min-width:26px;height:30px;padding:0 3px;border-radius:7px;border:1px solid var(--bd);background:var(--sf2);color:var(--mu);font-family:'DM Mono',monospace;font-size:13px;font-weight:500;cursor:pointer;transition:all .1s;flex:1}
+.nbtn.sel{background:var(--ac);border-color:var(--ac);color:#fff}
+.nbtn.sel.z0{background:var(--mu);border-color:var(--mu)}
+.cdsp{margin-top:10px;padding-top:10px;border-top:1px solid var(--bd);display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.clb{font-size:11px;color:var(--mu);letter-spacing:.8px}
+.cvl{font-family:'DM Mono',monospace;font-size:15px;font-weight:500;color:var(--tx)}
+.cefc{font-size:11px;color:var(--mu)}
+.qscroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+table.qt{width:100%;border-collapse:collapse;font-size:13px;min-width:240px}
+table.qt th{padding:7px 9px;text-align:center;font-size:11px;color:var(--mu);background:var(--sf2);border-bottom:1px solid var(--bd);white-space:nowrap}
+table.qt td{padding:6px 9px;text-align:center;border-bottom:1px solid var(--bd);font-family:'DM Mono',monospace;font-size:13px}
+table.qt tr:last-child td{border-bottom:none}
+table.qt tr.hl td{background:rgba(79,124,255,.11)}
+table.qt td.wc{color:var(--mu);text-align:left;padding-left:12px}
+</style>
+</head>
+<body>
+<header>
+  <h1>539 查表工具</h1>
+  <div class="ptabs">
+    <div class="ptab active" onclick="setPage('lp')">連碰</div>
+    <div class="ptab" onclick="setPage('pillar')">立柱</div>
+  </div>
+</header>
+
+<!-- ══ 連碰頁 ══ -->
+<div class="page active" id="page-lp">
+
+  <!-- 星數控制 -->
+  <div class="cbar" style="margin-top:12px">
+    <div class="cg">
+      <button class="cb2" onclick="adjLpStar(-1)">−</button>
+      <span class="cl">顯示至</span>
+      <span class="cv" id="lp-star-val">4</span>
+      <span class="cl" style="padding-left:0">星</span>
+      <button class="cb2" onclick="adjLpStar(1)">＋</button>
+    </div>
+    <div class="cg">
+      <button class="cb2" onclick="adjLpMax(-1)">−</button>
+      <span class="cl">號碼上限</span>
+      <span class="cv" id="lp-max-val">50</span>
+      <button class="cb2" onclick="adjLpMax(1)">＋</button>
+    </div>
+  </div>
+
+  <!-- 號碼數量選擇器 -->
+  <div class="card">
+    <div class="ch">選擇這組有幾個號碼</div>
+    <div class="cb">
+      <div class="num-picker">
+        <div>
+          <div class="picker-display" id="lp-num">5</div>
+          <div class="picker-display pd-label" style="font-size:12px;color:var(--mu);text-align:center;margin-top:4px;font-family:'Noto Sans TC',sans-serif">個號碼</div>
+        </div>
+        <div class="picker-btns" id="lp-btns"></div>
+        <div class="picker-hint" id="lp-hint"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 結果 -->
+  <div class="card" id="lp-result">
+    <div class="ch">計算結果</div>
+    <div class="scards" id="lp-scards"></div>
+    <div class="price-section">
+      <div class="price-row">
+        <span class="price-label">每注價格</span>
+        <div class="price-disp" id="lp-pdisp">1</div>
+      </div>
+      <div class="price-result" id="lp-presult"></div>
+      <div class="keypad" id="lp-keypad"></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ══ 立柱頁 ══ -->
+<div class="page" id="page-pillar">
+  <div class="cbar" style="margin-top:12px">
+    <div class="cg">
+      <button class="cb2" onclick="adjCols(-1)">−</button>
+      <span class="cl">柱數</span>
+      <span class="cv" id="col-val">4</span>
+      <button class="cb2" onclick="adjCols(1)">＋</button>
+    </div>
+    <div class="cg">
+      <button class="cb2" onclick="adjMaxNum(-1)">−</button>
+      <span class="cl">每柱上限</span>
+      <span class="cv" id="mn-val">10</span>
+      <button class="cb2" onclick="adjMaxNum(1)">＋</button>
+    </div>
+    <div class="cg">
+      <button class="cb2" onclick="adjPStar(-1)">−</button>
+      <span class="cl">顯示至</span>
+      <span class="cv" id="ps-val">4</span>
+      <span class="cl" style="padding-left:0">星</span>
+      <button class="cb2" onclick="adjPStar(1)">＋</button>
+    </div>
+  </div>
+
+  <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
+    <div class="mtog">
+      <button class="mbtn active" id="btn-sl" onclick="setInputMode('slider')">滑桿</button>
+      <button class="mbtn" id="btn-pk" onclick="setInputMode('pick')">點選</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="ch">每柱號碼數（0＝不使用）</div>
+    <div class="cb">
+      <div class="slrows" id="sliders"></div>
+      <div class="cdsp">
+        <span class="clb">組合</span>
+        <span class="cvl" id="combo-val">—</span>
+        <span class="cefc" id="eff-cols"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="ch">計算結果</div>
+    <div class="scards" id="p-scards"></div>
+    <div class="price-section">
+      <div class="price-row">
+        <span class="price-label">每注價格</span>
+        <div class="price-disp" id="p-pdisp">1</div>
+      </div>
+      <div class="price-result" id="p-presult"></div>
+      <div class="keypad" id="p-keypad"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="ch" style="justify-content:space-between;display:flex">
+      <span>同欄組合</span>
+      <span id="group-lbl" style="color:var(--ac);font-family:'DM Mono',monospace;font-size:13px"></span>
+    </div>
+    <div class="qscroll">
+      <table class="qt"><thead id="qt-head"></thead><tbody id="qt-body"></tbody></table>
+    </div>
+  </div>
+</div>
+
+<script>
+const SC={2:'#60a5fa',3:'#34d399',4:'#fbbf24',5:'#f87171',6:'#c084fc'};
+const SL={2:'二星',3:'三星',4:'四星',5:'五星',6:'六星'};
+
+function C(n,r){
+  if(r<0||r>n)return 0;if(r===0||r===n)return 1;
+  let a=1,b=1;for(let i=0;i<r;i++){a*=(n-i);b*=(i+1)}
+  return Math.round(a/b);
+}
+function combs(n,r){
+  const res=[];
+  function bt(s,c){if(c.length===r){res.push([...c]);return}for(let i=s;i<n;i++){c.push(i);bt(i+1,c);c.pop()}}
+  bt(0,[]); return res;
+}
+function calcStarsParts(parts){
+  const n=parts.length,stars={};
+  for(let r=2;r<=n;r++){
+    let t=0;for(const cb of combs(n,r)){let p=1;for(const i of cb)p*=parts[i];t+=p}
+    stars[r]=t;
+  }
+  return stars;
+}
+function formulaStr(parts,r){
+  const terms=combs(parts.length,r).map(c=>c.map(i=>parts[i]).join('×'));
+  if(terms.length<=4)return terms.join(' + ');
+  return terms.slice(0,3).join(' + ')+` … (${terms.length}項)`;
+}
+
+function setPage(p){
+  document.querySelectorAll('.page').forEach(e=>e.classList.remove('active'));
+  document.querySelectorAll('.ptab').forEach(e=>e.classList.remove('active'));
+  document.getElementById('page-'+p).classList.add('active');
+  document.querySelectorAll('.ptab')[p==='lp'?0:1].classList.add('active');
+}
+
+// ── Price keypad ──
+const prices={};
+function initPrice(id, getStarsFn){
+  prices[id]={val:'1',getFn:getStarsFn};
+  renderKeypad(id);
+  updatePrice(id);
+}
+function renderKeypad(id){
+  const kp=document.getElementById(id+'-keypad');
+  const keys=[7,8,9,'C',4,5,6,'←',1,2,3,'.','00',0,'.','OK'];
+  // dedupe dot: replace second dot with empty placeholder
+  const final=[7,8,9,'C',4,5,6,'←',1,2,3,'.','00',0,'','OK'];
+  kp.innerHTML=final.map(k=>{
+    if(k==='')return`<div></div>`;
+    const cls=k==='C'?'key red':k==='OK'?'key blue':'key';
+    return`<button class="${cls}" onclick="priceKey('${id}','${k}')">${k==='←'?'⌫':k}</button>`;
+  }).join('');
+}
+function priceKey(id,k){
+  let v=prices[id].val||'1';
+  if(k==='C'){v='0';}
+  else if(k==='←'){v=v.length>1?v.slice(0,-1):'0';}
+  else if(k==='OK'){updatePrice(id);return;}
+  else if(k==='.'){if(!v.includes('.'))v+='.'}
+  else{
+    const s=String(k);
+    if(v==='0'&&s!=='.')v=s;
+    else if(v.includes('.')&&v.split('.')[1].length>=2)return;
+    else v+=s;
+  }
+  if(v.length>8)return;
+  prices[id].val=v;
+  document.getElementById(id+'-pdisp').textContent=v;
+  updatePrice(id);
+}
+function updatePrice(id){
+  const price=parseFloat(prices[id].val)||1;
+  const stars=prices[id].getFn();
+  const el=document.getElementById(id+'-presult');
+  if(!stars||Object.keys(stars).length===0){el.innerHTML='';return;}
+  const lines=Object.entries(stars).map(([r,cnt])=>{
+    const tot=Math.round(cnt*price*100)/100;
+    return`${SL[r]} ${cnt} 注 × ${price} = <b>${tot}</b> 元`;
+  });
+  el.innerHTML=lines.join('<br>');
+}
+
+// ══ 連碰頁 ══
+let lpNum=5, lpStarMax=4, lpPoolMax=50;
+let lpStars={};
+
+function adjLpStar(d){
+  lpStarMax=Math.max(2,Math.min(6,lpStarMax+d));
+  document.getElementById('lp-star-val').textContent=lpStarMax;
+  calcLp();
+}
+function adjLpMax(d){
+  lpPoolMax=Math.max(2,Math.min(99,lpPoolMax+d));
+  document.getElementById('lp-max-val').textContent=lpPoolMax;
+  if(lpNum>lpPoolMax)lpNum=lpPoolMax;
+  buildLpBtns(); calcLp();
+}
+function buildLpBtns(){
+  const cont=document.getElementById('lp-btns');
+  const max=Math.min(lpPoolMax,20); // show up to 20 quick-select buttons
+  cont.innerHTML='';
+  for(let n=2;n<=max;n++){
+    const btn=document.createElement('button');
+    btn.className='pnum'+(n===lpNum?' sel':'');
+    btn.textContent=n;
+    btn.onclick=()=>{lpNum=n;buildLpBtns();calcLp();}
+    cont.appendChild(btn);
+  }
+  // if pool > 20, show +/- nudge hint
+  document.getElementById('lp-hint').textContent=
+    lpPoolMax>20?`可用上方「號碼上限」調整，目前最多顯示到 ${lpPoolMax}`:'';
+  document.getElementById('lp-num').textContent=lpNum;
+}
+function calcLp(){
+  document.getElementById('lp-num').textContent=lpNum;
+  const n=lpNum, showMax=Math.min(lpStarMax,n);
+  lpStars={};
+  for(let r=2;r<=showMax;r++) lpStars[r]=C(n,r);
+
+  const sc=document.getElementById('lp-scards');
+  sc.innerHTML='';
+  for(let r=2;r<=showMax;r++){
+    const d=document.createElement('div');d.className='scard';
+    d.innerHTML=`<div class="sname"><div class="sdot" style="background:${SC[r]}"></div><div><div class="slbl">${SL[r]}</div><div class="sfml">C(${n},${r}) = ${lpStars[r]}</div></div></div><div style="text-align:right"><div class="scnt" style="color:${SC[r]}">${lpStars[r]}</div><div class="sunit">注</div></div>`;
+    sc.appendChild(d);
+  }
+  updatePrice('lp');
+}
+
+// ══ 立柱頁 ══
+let pcols=4, maxNum=10, pStarMax=4, pvals=[1,1,1,1], inputMode='slider';
+let pStars={};
+
+function adjCols(d){
+  pcols=Math.max(2,Math.min(10,pcols+d));
+  pvals=pvals.slice(0,pcols);
+  while(pvals.length<pcols)pvals.push(1);
+  if(pStarMax>pcols)pStarMax=pcols;
+  document.getElementById('col-val').textContent=pcols;
+  document.getElementById('ps-val').textContent=pStarMax;
+  buildSliders(); updatePillar();
+}
+function adjMaxNum(d){
+  maxNum=Math.max(1,Math.min(99,maxNum+d));
+  pvals=pvals.map(v=>Math.min(v,maxNum));
+  document.getElementById('mn-val').textContent=maxNum;
+  buildSliders(); updatePillar();
+}
+function adjPStar(d){
+  const eff=pvals.filter(v=>v>0).length;
+  pStarMax=Math.max(2,Math.min(pcols,Math.min(eff||pcols,pStarMax+d)));
+  document.getElementById('ps-val').textContent=pStarMax;
+  updatePillar();
+}
+function setInputMode(m){
+  inputMode=m;
+  document.getElementById('btn-sl').classList.toggle('active',m==='slider');
+  document.getElementById('btn-pk').classList.toggle('active',m==='pick');
+  buildSliders(); updatePillar();
+}
+function buildSliders(){
+  const cont=document.getElementById('sliders');
+  cont.innerHTML='';
+  for(let i=0;i<pcols;i++){
+    const v=pvals[i]??1;
+    const row=document.createElement('div');
+    if(inputMode==='slider'){
+      row.className='slrow';
+      row.innerHTML=`<span class="plbl">柱${i+1}</span><input type="range" min="0" max="${maxNum}" value="${v}" step="1" data-idx="${i}"><span class="sv ${v===0?'z':'nz'}" id="sv${i}">${v}</span>`;
+      row.querySelector('input').addEventListener('input',function(){
+        const nv=+this.value;pvals[+this.dataset.idx]=nv;
+        const el=document.getElementById('sv'+this.dataset.idx);
+        el.textContent=nv;el.className='sv '+(nv===0?'z':'nz');
+        updatePillar();
+      });
+    } else {
+      row.className='brow';
+      const btns=Array.from({length:maxNum+1},(_,n)=>`<button class="nbtn${n===0?' z0':''}${v===n?' sel':''}" data-idx="${i}" data-n="${n}">${n}</button>`).join('');
+      row.innerHTML=`<span class="plbl">柱${i+1}</span><div class="nbtns">${btns}</div>`;
+      row.querySelectorAll('.nbtn').forEach(btn=>{
+        btn.addEventListener('click',function(){
+          const idx=+this.dataset.idx,n=+this.dataset.n;
+          pvals[idx]=n;
+          row.querySelectorAll('.nbtn').forEach(b=>b.classList.toggle('sel',+b.dataset.n===n));
+          updatePillar();
+        });
+      });
+    }
+    cont.appendChild(row);
+  }
+}
+function cwrRange(k){
+  const res=[];
+  function bt(mn,cur){if(cur.length===k){res.push([...cur]);return}for(let v=mn;v<=5;v++){cur.push(v);bt(v,cur);cur.pop()}}
+  bt(1,[]); return res;
+}
+function updatePillar(){
+  const eff=pvals.filter(v=>v>0);
+  const ec=eff.length;
+  document.getElementById('combo-val').textContent=pvals.join('×');
+  document.getElementById('eff-cols').textContent=ec<pcols?`（有效${ec}柱）`:'';
+
+  const sc=document.getElementById('p-scards');
+  sc.innerHTML='';
+  pStars={};
+  if(ec<2){sc.innerHTML='<div class="empty">至少需要 2 柱非零</div>';updatePrice('p');return;}
+  const stars=calcStarsParts(eff);
+  const showMax=Math.min(pStarMax,ec);
+  for(let r=2;r<=showMax;r++){
+    pStars[r]=stars[r];
+    const d=document.createElement('div');d.className='scard';
+    d.innerHTML=`<div class="sname"><div class="sdot" style="background:${SC[r]}"></div><div><div class="slbl">${SL[r]}</div><div class="sfml">${formulaStr(eff,r)}</div></div></div><div style="text-align:right"><div class="scnt" style="color:${SC[r]}">${stars[r]}</div><div class="sunit">隻</div></div>`;
+    sc.appendChild(d);
+  }
+  updatePrice('p');
+
+  // quick table
+  const firstVal=eff[0];
+  document.getElementById('group-lbl').textContent=firstVal+' 開頭';
+  const groupRows=cwrRange(ec-1).map(rest=>{const p=[firstVal,...rest];return{way:p.join('×'),stars:calcStarsParts(p)};});
+  let hh='<tr><th>組合方式</th>';
+  for(let r=2;r<=showMax;r++) hh+=`<th style="color:${SC[r]}">${SL[r]}</th>`;
+  hh+='</tr>';
+  document.getElementById('qt-head').innerHTML=hh;
+  const currentKey=eff.join('×');
+  const tbody=document.getElementById('qt-body');
+  tbody.innerHTML=groupRows.map(row=>{
+    const hl=row.way===currentKey?' class="hl"':'';
+    let tds=`<td class="wc">${row.way}</td>`;
+    for(let r=2;r<=showMax;r++) tds+=`<td style="color:${SC[r]}">${row.stars[r]}</td>`;
+    return`<tr${hl}>${tds}</tr>`;
+  }).join('');
+  const hlRow=tbody.querySelector('tr.hl');
+  if(hlRow) setTimeout(()=>hlRow.scrollIntoView({block:'nearest',behavior:'smooth'}),100);
+}
+
+// init
+buildLpBtns();
+calcLp();
+initPrice('lp',()=>lpStars);
+initPrice('p',()=>pStars);
+buildSliders();
+updatePillar();
+</script>
+</body>
+</html>

@@ -440,8 +440,7 @@ function updatePillar(){
     for(let r=2;r<=showMax;r++) tds+=`<td style="color:${SC[r]}">${row.stars[r]}</td>`;
     return`<tr${hl}>${tds}</tr>`;
   }).join('');
-  const hlRow=tbody.querySelector('tr.hl');
-  if(hlRow) setTimeout(()=>hlRow.scrollIntoView({block:'nearest',behavior:'smooth'}),100);
+
 }
 
 // init

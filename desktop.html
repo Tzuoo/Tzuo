@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>539 查表工具 v2</title>
+<title>539 查表工具 v2 - 小表百元小數修正版</title>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#0f1117;--sf:#1a1d27;--sf2:#22263a;--bd:#2e3450;--ac:#4f7cff;--ac2:#7c5fff;--tx:#e8eaf6;--mu:#7880a0;--c2:#60a5fa;--c3:#34d399;--c4:#fbbf24;--c5:#f87171;--c6:#c084fc}
@@ -145,7 +145,7 @@ h1{font-size:16px;font-weight:700;letter-spacing:2px;background:linear-gradient(
 </head>
 <body>
 <header>
-  <h1>539 查表工具 v2</h1>
+  <h1>539 查表工具 v2 <span style="font-size:10px;color:var(--mu);-webkit-text-fill-color:var(--mu);background:none">小數列修正版 20260604</span></h1>
   <div class="ptabs">
     <div class="ptab active" onclick="setPage('main')">面板</div>
     <div class="ptab" onclick="setPage('list')">清單<span id="list-badge" style="display:none;background:var(--ac);color:#fff;font-size:10px;padding:1px 5px;border-radius:6px;margin-left:3px;vertical-align:middle"></span></div>
@@ -178,6 +178,74 @@ h1{font-size:16px;font-weight:700;letter-spacing:2px;background:linear-gradient(
 const SC={2:'#60a5fa',3:'#34d399',4:'#fbbf24',5:'#f87171',6:'#c084fc',7:'#38bdf8',8:'#a3e635',9:'#fb923c'};
 const SL={2:'二星',3:'三星',4:'四星',5:'五星',6:'六星',7:'七星',8:'八星',9:'九星'};
 function C(n,r){if(r<0||r>n)return 0;if(r===0||r===n)return 1;let a=1,b=1;for(let i=0;i<r;i++){a*=(n-i);b*=(i+1)}return Math.round(a/b);}
+
+function cleanDec(s){
+  s = String(s ?? '').trim();
+  if(!s || s==='.') return '0';
+  if(s.startsWith('.')) s='0'+s;
+  if(s.endsWith('.')) s=s.slice(0,-1);
+  return s || '0';
+}
+function trimDecStr(s){
+  s=String(s);
+  if(s.includes('.')) s=s.replace(/\.0+$/,'').replace(/(\.\d*?)0+$/,'$1').replace(/\.$/,'');
+  if(s==='-0') s='0';
+  return s;
+}
+function decMulIntStr(dec, mult){
+  dec=cleanDec(dec);
+  mult=BigInt(mult||0);
+  let neg=false;
+  if(dec[0]==='-'){neg=true;dec=dec.slice(1);}
+  let [intPart, fracPart=''] = dec.split('.');
+  intPart=intPart.replace(/^0+(?=\d)/,'') || '0';
+  const scale=fracPart.length;
+  let digits=(intPart+fracPart).replace(/^0+(?=\d)/,'') || '0';
+  let n=BigInt(digits)*mult;
+  if(n===0n) return '0';
+  let out=n.toString();
+  if(scale>0){
+    if(out.length<=scale) out='0'.repeat(scale-out.length+1)+out;
+    out=out.slice(0,out.length-scale)+'.'+out.slice(out.length-scale);
+  }
+  out=trimDecStr(out);
+  return neg?'-'+out:out;
+}
+function decAddStr(a,b){
+  a=cleanDec(a); b=cleanDec(b);
+  const negA=a[0]==='-', negB=b[0]==='-';
+  if(negA || negB){ return trimDecStr(String((parseFloat(a)||0)+(parseFloat(b)||0))); }
+  const [ai,af='']=a.split('.'), [bi,bf='']=b.split('.');
+  const scale=Math.max(af.length,bf.length);
+  const A=BigInt((ai+(af+'0'.repeat(scale)).slice(0,scale)).replace(/^0+(?=\d)/,'')||'0');
+  const B=BigInt((bi+(bf+'0'.repeat(scale)).slice(0,scale)).replace(/^0+(?=\d)/,'')||'0');
+  let out=(A+B).toString();
+  if(scale>0){
+    if(out.length<=scale) out='0'.repeat(scale-out.length+1)+out;
+    out=out.slice(0,out.length-scale)+'.'+out.slice(out.length-scale);
+  }
+  return trimDecStr(out);
+}
+function amountStr(cnt, price){
+  if(!cnt || !price || cleanDec(price)==='0') return null;
+  return decMulIntStr(price, Number(cnt)*100);
+}
+function amountHundredStr(cnt, price){
+  // 總計小表每一筆紀錄顯示「百元單位」：注數 × 百元價格。
+  // 絕對不做 Math.round / toFixed，輸出完整小數。
+  // 例：6注 × 2.33百 = 13.98；4注 × 1.64百 = 6.56；1注 × 1.7322百 = 1.7322。
+  if(!cnt || price===undefined || price===null || cleanDec(price)==='0') return null;
+  return decMulIntStr(cleanDec(price), Number(cnt));
+}
+
+function __decimalDisplaySelfTest(){
+  return {
+    twoStar: amountHundredStr(6,'2.33'),
+    threeStar: amountHundredStr(4,'1.64'),
+    fourStarA: amountHundredStr(1,'1.581'),
+    fourStarB: amountHundredStr(1,'1.7322')
+  };
+}
 function combs(n,r){const res=[];function bt(s,c){if(c.length===r){res.push([...c]);return}for(let i=s;i<n;i++){c.push(i);bt(i+1,c);c.pop()}}bt(0,[]);return res;}
 function calcStarsParts(parts){const n=parts.length,stars={};for(let r=2;r<=n;r++){let t=0;for(const cb of combs(n,r)){let p=1;for(const i of cb)p*=parts[i];t+=p}stars[r]=t;}return stars;}
 
@@ -456,9 +524,9 @@ function renderLpPanel(id='lp'){
     // picker
     const picker=document.createElement('div');
     picker.className='num-picker';
-    const n=lpNum, showMax=Math.min(lpStarMax,n);
+    const n=lpNum, showMax=lpStarMax;
     lpStars={};
-    for(let r=2;r<=showMax;r++){ const v=C(n,r); if(v>0) lpStars[r]=v; }
+    for(let r=2;r<=showMax;r++){ lpStars[r]=C(n,r); }
     let btns='';
     for(let i=2;i<=20;i++) btns+=`<button class="pnum${i===lpNum?' sel':''}" onclick="setLpNum(${i})">${i}</button>`;
     const prev=Object.entries(lpStars).map(([r,cnt])=>`<span style="color:${SC[r]}">${SL[r]}</span> <b>${cnt}</b>注`).join('　');
@@ -575,7 +643,7 @@ function pkManual(k){
   if(manualInputField==='notes'){
     let v=manualNotes[r]||'';
     if(k==='DEL'){v=v.length>1?v.slice(0,-1):'';}
-    else if(k==='OK'){const s=Array.from({length:manualStarMax-1},(_,i)=>i+2);const i=s.indexOf(r);if(i<s.length-1){manualActiveR=s[i+1];highlightManualR();}return;}
+    else if(k==='OK'){const s=Array.from({length:manualStarMax-1},(_,i)=>i+2);const i=s.indexOf(r);if(i<s.length-1){manualActiveR=s[i+1];}else{manualActiveR=2;}highlightManualR();return;}
     else if(k==='.'){} // 注數不需要小數點
     else{if(v==='0'||v==='')v=k;else v+=k;}
     manualNotes[r]=v;
@@ -584,7 +652,7 @@ function pkManual(k){
   } else {
     let v=manualPrices2[r]||'';
     if(k==='DEL'){v=v.length>1?v.slice(0,-1):'';}
-    else if(k==='OK'){const s=Array.from({length:manualStarMax-1},(_,i)=>i+2);const i=s.indexOf(r);if(i<s.length-1){manualActiveR=s[i+1];highlightManualR();}return;}
+    else if(k==='OK'){const s=Array.from({length:manualStarMax-1},(_,i)=>i+2);const i=s.indexOf(r);if(i<s.length-1){manualActiveR=s[i+1];manualInputField='notes';}else{manualActiveR=2;manualInputField='notes';}highlightManualR();return;}
     else if(k==='.'){if(!v.includes('.'))v+='.';}
     else{if(v==='0')v=k;else v+=k;}
     manualPrices2[r]=v;
@@ -604,7 +672,7 @@ function adjMaxNum(d){maxNum=Math.max(1,Math.min(99,maxNum+d));pvals=pvals.map(v
 function setMaxNumDirect(v){maxNum=Math.max(1,Math.min(99,parseInt(v)||maxNum));pvals=pvals.map(v2=>Math.min(v2,maxNum));renderPPanel();}
 function adjPStar(d){pStarMax=Math.max(2,Math.min(9,pStarMax+d));renderPPanel();}
 function setPStarDirect(v){pStarMax=Math.max(2,Math.min(9,parseInt(v)||pStarMax));renderPPanel();}
-function setInputMode(m){inputMode=m;pillarKbIdx=0;renderPPanel();}
+function setInputMode(m){inputMode=m;pillarKbIdx=0;renderPPanel();if(m==='kb')setKbFocus('pk');else setKbFocus('p');}
 
 function renderPPanel(id='p'){
   const body=document.getElementById('pb-p');
@@ -788,14 +856,15 @@ function renderSummaryPanel(id){
   }
 
   // 收集所有星的注數和金額
-  const totN={},totA={};let grand=0;
+  const totN={},totA={};let grand='0';
   for(const item of listItems){
     for(const [r,cnt] of Object.entries(item.stars)){
       const ri=+r;
       totN[ri]=(totN[ri]||0)+cnt;
-      const a=cnt*(item.starPrices[ri]||0)*100;
-      totA[ri]=(totA[ri]||0)+a;
-      grand+=a;
+      const h=amountHundredStr(cnt,item.starPrices[ri]);
+      if(h!==null) totA[ri]=decAddStr(totA[ri]||'0',h);
+      const y=amountStr(cnt,item.starPrices[ri]);
+      if(y!==null) grand=decAddStr(grand,y);
     }
   }
   const stars=Object.keys(totN).map(Number).sort((a,b)=>a-b);
@@ -817,9 +886,9 @@ function renderSummaryPanel(id){
       `<div style="width:28px;font-size:10px;color:${tagColor}">${i+1}</div>`+
       stars.map(r=>{
         const cnt=item.stars[r]||0;
-        const price=item.starPrices[r]||0;
-        // 顯示金額（百元），例如 3.8 表示 380元
-        const amt=cnt&&price ? Math.round(cnt*price*10)/10 : null;
+        const price=item.starPrices[r] || '0';
+        // 顯示每一筆紀錄的百元金額：注數 × 百元價格，保留完整小數
+        const amt=amountHundredStr(cnt, price);
         return `<div style="flex:1;text-align:right;font-family:'DM Mono',monospace;font-size:12px;color:${amt!==null?SC[r]:'var(--mu)'}">${amt!==null?amt:'—'}</div>`;
       }).join('')+
       `<button onclick="delItem(${item.id})" style="width:22px;height:22px;border:none;background:transparent;color:var(--mu);cursor:pointer;font-size:15px;padding:0;flex-shrink:0;line-height:1">×</button>`;
@@ -831,7 +900,7 @@ function renderSummaryPanel(id){
   totRow.style.cssText='display:flex;padding:4px 6px;gap:2px;background:var(--sf2);border-top:1px solid var(--bd);align-items:center';
   totRow.innerHTML='<div style="width:28px;font-size:10px;color:var(--mu)">計</div>'+
     stars.map(r=>{
-      const amt=totA[r]?Math.round(totA[r]/10)/10:0;
+      const amt=totA[r]||null;
       return `<div style="flex:1;text-align:right;font-family:'DM Mono',monospace;font-size:12px;font-weight:500;color:${SC[r]}">${amt||'—'}</div>`;
     }).join('')+
     '<div style="width:22px"></div>';
@@ -840,7 +909,7 @@ function renderSummaryPanel(id){
   // 總金額
   const g=document.createElement('div');
   g.style.cssText='display:flex;justify-content:space-between;padding:6px 8px;border-top:1px solid var(--bd)';
-  g.innerHTML=`<span style="font-size:12px;color:var(--mu)">總金額</span><span style="font-family:'DM Mono',monospace;font-size:14px;font-weight:700;color:var(--c4)">${Math.round(grand*100)/100} 元</span>`;
+  g.innerHTML=`<span style="font-size:12px;color:var(--mu)">總金額</span><span style="font-family:'DM Mono',monospace;font-size:14px;font-weight:700;color:var(--c4)">${grand} 元</span>`;
   body.appendChild(g);
 }
 
@@ -882,14 +951,14 @@ function addToList(type){
   if(type==='lp'){
     if(!Object.keys(lpStars).length){alert('無有效星數');return;}
     stars={...lpStars};desc=`連碰 ${lpNum}個`;tag='lp';
-    Object.keys(stars).map(Number).forEach(r=>{const v=parseFloat(prices['lp'][r]);starPrices[r]=isNaN(v)?0:v;});
+    Object.keys(stars).map(Number).forEach(r=>{starPrices[r]=cleanDec(prices['lp'][r]||'0');});
     // 清除價格
     Object.keys(lpStars).map(Number).forEach(r=>{prices['lp'][r]='';const el=document.getElementById(`lp-sp-${r}`);if(el){el.textContent='輸入';el.classList.add('empty');}});
   } else if(type==='p'){
     const eff=pvals.filter(v=>v>0);if(eff.length<2){alert('至少需要2柱非零');return;}
     if(!Object.keys(pStars).length){alert('無有效星數');return;}
     stars={...pStars};desc=`立柱 ${pvals.join('×')}`;tag='pi';
-    Object.keys(stars).map(Number).forEach(r=>{const v=parseFloat(prices['p'][r]);starPrices[r]=isNaN(v)?0:v;});
+    Object.keys(stars).map(Number).forEach(r=>{starPrices[r]=cleanDec(prices['p'][r]||'0');});
     // 清除價格
     Object.keys(pStars).map(Number).forEach(r=>{prices['p'][r]='';const el=document.getElementById(`p-sp-${r}`);if(el){el.textContent='輸入';el.classList.add('empty');}});
   } else {
@@ -898,7 +967,7 @@ function addToList(type){
     [2,3,4,5,6,7,8,9].forEach(r=>{const n=parseInt(manualNotes[r]);if(n&&n>0)stars[r]=n;});
     if(!Object.keys(stars).length){alert('請輸入至少一個星的注數');return;}
     desc='手動補入';tag='mn';
-    [2,3,4,5,6,7,8,9].forEach(r=>{const v=parseFloat(manualPrices2[r]);starPrices[r]=isNaN(v)?0:v;});
+    [2,3,4,5,6,7,8,9].forEach(r=>{starPrices[r]=cleanDec(manualPrices2[r]||'0');});
     // 清除注數與價格
     [2,3,4,5,6,7,8,9].forEach(r=>{
       manualNotes[r]='';manualPrices2[r]='';
@@ -932,7 +1001,7 @@ function renderList(){ renderMiniTotalPanel("tot");
   cont.innerHTML=listItems.map(item=>{
     const sh=Object.entries(item.stars).map(([r,cnt])=>{
       const price=item.starPrices[+r]||0;
-      const amt=price?Math.round(cnt*price*100*100)/100:null;
+      const amt=amountStr(cnt,price);
       return `<span style="color:${SC[r]}">${SL[r]}</span> <b>${cnt}</b>注${amt!==null?` × ${price} = <b style="color:${SC[r]}">${amt}</b>元`:''}`;
     }).join('<br>');
     return `<div class="list-item"><div class="li-left"><span class="li-tag ${item.type}">${{lp:'連碰',pi:'立柱',mn:'手動'}[item.type]}</span><div class="li-desc">${item.desc}</div><div class="li-stars">${sh}</div></div><button class="li-del" onclick="delItem(${item.id})">×</button></div>`;
@@ -950,13 +1019,14 @@ function renderMiniTotalPanel(id){
     return;
   }
 
-  const totA={};let grand=0;
+  const totA={};let grand='0';
   for(const item of listItems){
     for(const [r,cnt] of Object.entries(item.stars)){
       const ri=+r;
-      const a=cnt*(item.starPrices[ri]||0)*100;
-      totA[ri]=(totA[ri]||0)+a;
-      grand+=a;
+      const h=amountHundredStr(cnt,item.starPrices[ri]);
+      if(h!==null) totA[ri]=decAddStr(totA[ri]||'0',h);
+      const y=amountStr(cnt,item.starPrices[ri]);
+      if(y!==null) grand=decAddStr(grand,y);
     }
   }
   const stars=Object.keys(totA).map(Number).sort((a,b)=>a-b);
@@ -977,8 +1047,8 @@ function renderMiniTotalPanel(id){
     row.innerHTML=`<div style="width:22px;font-size:10px;color:${tc}">${i+1}</div>`+
       stars.map(r=>{
         const cnt=item.stars[r]||0;
-        const price=item.starPrices[r]||0;
-        const amt=cnt&&price?Math.round(cnt*price*10)/10:null;
+        const price=item.starPrices[r] || '0';
+        const amt=amountHundredStr(cnt, price);
         return `<div style="flex:1;text-align:right;font-family:'DM Mono',monospace;font-size:12px;color:${amt!==null?SC[r]:'var(--mu)'}">${amt!==null?amt:'—'}</div>`;
       }).join('')+
       `<button onclick="delItem(${item.id})" style="width:20px;height:20px;border:none;background:transparent;color:var(--mu);cursor:pointer;font-size:14px;padding:0;flex-shrink:0">×</button>`;
@@ -990,7 +1060,7 @@ function renderMiniTotalPanel(id){
   tot.style.cssText='display:flex;padding:3px 6px;gap:2px;background:var(--sf2);border-top:1px solid var(--bd);align-items:center';
   tot.innerHTML='<div style="width:22px;font-size:10px;color:var(--mu)">計</div>'+
     stars.map(r=>{
-      const amt=totA[r]?Math.round(totA[r]/10)/10:0;
+      const amt=totA[r]||null;
       return `<div style="flex:1;text-align:right;font-family:'DM Mono',monospace;font-size:12px;font-weight:500;color:${SC[r]}">${amt||'—'}</div>`;
     }).join('')+
     '<div style="width:20px"></div>';
@@ -999,7 +1069,7 @@ function renderMiniTotalPanel(id){
   // 總金額
   const g=document.createElement('div');
   g.style.cssText='display:flex;justify-content:space-between;padding:5px 8px;border-top:1px solid var(--bd)';
-  g.innerHTML=`<span style="font-size:11px;color:var(--mu)">總金額</span><span style="font-family:'DM Mono',monospace;font-size:14px;font-weight:700;color:var(--c4)">${Math.round(grand*100)/100} 元</span>`;
+  g.innerHTML=`<span style="font-size:11px;color:var(--mu)">總金額</span><span style="font-family:'DM Mono',monospace;font-size:14px;font-weight:700;color:var(--c4)">${grand} 元</span>`;
   body.appendChild(g);
 }
 
@@ -1010,17 +1080,17 @@ function renderMiniTotal(){
 function renderTotal(){
   const sec=document.getElementById('total-section');
   if(!listItems.length){sec.innerHTML='<div class="list-empty" style="padding:8px 0">尚無資料</div>';return;}
-  const totN={},totA={};let grand=0;
+  const totN={},totA={};let grand='0';
   for(const item of listItems){
     for(const [r,cnt] of Object.entries(item.stars)){
       const ri=+r;totN[ri]=(totN[ri]||0)+cnt;
-      const a=cnt*(item.starPrices[ri]||0)*100;
-      totA[ri]=(totA[ri]||0)+a;grand+=a;
+      const a=amountStr(cnt,item.starPrices[ri]);
+      if(a!==null){totA[ri]=decAddStr(totA[ri]||'0',a);grand=decAddStr(grand,a);}
     }
   }
   const stars=Object.keys(totN).map(Number).sort((a,b)=>a-b);
-  let html=stars.map(r=>`<div class="total-row"><div class="total-label"><div class="total-dot" style="background:${SC[r]}"></div><span style="color:${SC[r]}">${SL[r]}</span></div><div style="text-align:right"><div class="total-notes">${totN[r]} 注</div><div class="total-amt" style="color:${SC[r]}">${Math.round(totA[r]*100)/100} 元</div></div></div>`).join('');
-  html+=`<div class="total-row"><div class="grand-label">總金額</div><div class="grand-amt">${Math.round(grand*100)/100} 元</div></div>`;
+  let html=stars.map(r=>`<div class="total-row"><div class="total-label"><div class="total-dot" style="background:${SC[r]}"></div><span style="color:${SC[r]}">${SL[r]}</span></div><div style="text-align:right"><div class="total-notes">${totN[r]} 注</div><div class="total-amt" style="color:${SC[r]}">${totA[r]||'0'} 元</div></div></div>`).join('');
+  html+=`<div class="total-row"><div class="grand-label">總金額</div><div class="grand-amt">${grand} 元</div></div>`;
   sec.innerHTML=html;
 }
 
@@ -1042,11 +1112,7 @@ document.addEventListener('keydown',function(e){
         const stars=Object.keys(lpStars).map(Number).sort((a,b)=>a-b);
         const cur=activeStarTarget['lp'], idx=stars.indexOf(cur);
         if(idx>=0 && idx<stars.length-1){ selectStar('lp',stars[idx+1]); }
-        else {
-          // 連碰星跑完 → 立柱
-          if(inputMode==='kb'){ pillarKbIdx=0; setKbFocus('pk'); renderPPanel(); }
-          else { setKbFocus('p'); const ps=Object.keys(pStars).map(Number).sort((a,b)=>a-b); if(ps.length) selectStar('p',ps[0]); }
-        }
+        else { if(stars.length) selectStar('lp',stars[0]); }
       } else if(kbFocus==='pk'){
         if(pillarKbIdx<pcols-1){ pillarKbIdx++; renderPPanel(); }
         else { setKbFocus('p'); const ps=Object.keys(pStars).map(Number).sort((a,b)=>a-b); if(ps.length) selectStar('p',ps[0]); }
@@ -1055,14 +1121,10 @@ document.addEventListener('keydown',function(e){
         const cur=activeStarTarget['p'], idx=stars.indexOf(cur);
         if(idx>=0 && idx<stars.length-1){ selectStar('p',stars[idx+1]); }
         else {
-          // 立柱星跑完 → 回起點（連碰或手動）
-          if(tabOrigin==='mn'){
-            setKbFocus('mn'); manualActiveR=2; manualInputField='notes'; highlightManualR(); renderKbPanel2('kb');
-          } else {
-            setKbFocus('lp');
-            const ls=Object.keys(lpStars).map(Number).sort((a,b)=>a-b);
-            if(ls.length) selectStar('lp',ls[0]);
-          }
+          pillarKbIdx=0;
+          setKbFocus('pk');
+          if(inputMode!=='kb') inputMode='kb';
+          renderPPanel();
         }
       }
     } else {
@@ -1076,10 +1138,11 @@ document.addEventListener('keydown',function(e){
         // 價格 → 下一星注數
         manualActiveR=s[i+1]; manualInputField='notes'; highlightManualR(); renderKbPanel2('kb');
       } else {
-        // 手動最後一顆星價格 → 立柱
-        tabOrigin='mn'; // 記錄起點是手動
-        if(inputMode==='kb'){ pillarKbIdx=0; setKbFocus('pk'); renderPPanel(); }
-        else { setKbFocus('p'); const ps=Object.keys(pStars).map(Number).sort((a,b)=>a-b); if(ps.length) selectStar('p',ps[0]); }
+        // 手動最後一格 → 回到手動第一格（二星注數）
+        manualActiveR=2;
+        manualInputField='notes';
+        highlightManualR();
+        renderKbPanel2('kb');
       }
     }
     return;
@@ -1104,12 +1167,12 @@ document.addEventListener('keydown',function(e){
     e.preventDefault();
   }
   else if(key==='ArrowDown'||key==='ArrowRight'){
-    if(kbFocus==='mn'){const s=[2,3,4,5,6];const i=s.indexOf(manualActiveR);if(i<s.length-1){manualActiveR=s[i+1];highlightManualR();renderKbPanel2('kb');}}
+    if(kbFocus==='mn'){const s=Array.from({length:manualStarMax-1},(_,i)=>i+2);const i=s.indexOf(manualActiveR);if(i<s.length-1){manualActiveR=s[i+1];highlightManualR();renderKbPanel2('kb');}}
     else{const stars=kbFocus==='lp'?Object.keys(lpStars).map(Number):Object.keys(pStars).map(Number);if(!stars.length)return;const cur=activeStarTarget[kbFocus];const idx=stars.indexOf(cur);selectStar(kbFocus,stars[(idx+1)%stars.length]);}
     e.preventDefault();
   }
   else if(key==='ArrowUp'||key==='ArrowLeft'){
-    if(kbFocus==='mn'){const s=[2,3,4,5,6];const i=s.indexOf(manualActiveR);if(i>0){manualActiveR=s[i-1];highlightManualR();renderKbPanel2('kb');}}
+    if(kbFocus==='mn'){const s=Array.from({length:manualStarMax-1},(_,i)=>i+2);const i=s.indexOf(manualActiveR);if(i>0){manualActiveR=s[i-1];highlightManualR();renderKbPanel2('kb');}}
     else{const stars=kbFocus==='lp'?Object.keys(lpStars).map(Number):Object.keys(pStars).map(Number);if(!stars.length)return;const cur=activeStarTarget[kbFocus];const idx=stars.indexOf(cur);selectStar(kbFocus,stars[(idx-1+stars.length)%stars.length]);}
     e.preventDefault();
   }
@@ -1140,5 +1203,7 @@ panels['tot'].renderFn = renderMiniTotalPanel;
   if(savedState&&savedState[id]&&savedState[id].collapsed) togglePanel(id);
 });
 </script>
+<!-- build: desktop-synced-total-mini-table-hundred-decimal-fixed -->
+<!-- self-test: 6*1.332=7.992, 4*2.741=10.964, 1*3.653=3.653 -->
 </body>
 </html>

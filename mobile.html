@@ -142,17 +142,19 @@ h1{font-size:16px;font-weight:700;letter-spacing:2px;background:linear-gradient(
 .grand-label{font-size:13px;font-weight:700;color:var(--tx)}
 .grand-amt{font-family:'DM Mono',monospace;font-size:20px;font-weight:700;color:var(--c4)}
 
-/* mobile separated-page layout */
+/* mobile separated-page layout - 保留拖拉與縮放 */
 @media (max-width: 900px){
   header{padding-bottom:0}
   .ptabs{gap:4px}
   .ptab{flex:1;text-align:center;padding:7px 4px;font-size:12px}
   .page{padding:8px 8px 90px}
-  .panels-container{display:flex;flex-direction:column;gap:10px;min-height:0}
-  .panel{position:relative!important;left:auto!important;top:auto!important;width:100%!important;height:auto!important;min-width:0;min-height:0;overflow:visible}
-  .panel-body{height:auto!important;max-height:none;overflow:visible}
-  .resize-handle,.panel-controls{display:none!important}
-  .panel-header{cursor:default}
+  /* 不再把面板改成直向卡片，保留 absolute 才能上下左右拖拉 */
+  .panels-container{position:relative;display:block;min-height:1060px;overflow:visible}
+  .panel{position:absolute;min-width:220px;min-height:120px;overflow:hidden}
+  .panel-body{height:calc(100% - 34px);overflow-y:auto}
+  .panel-controls{display:flex!important}
+  .resize-handle{display:flex!important;width:26px;height:26px;padding:4px;font-size:15px;z-index:5}
+  .panel-header{cursor:grab;touch-action:none}
   .picker-display{font-size:42px}
   .kp-grid{gap:6px}
   .key{height:44px}

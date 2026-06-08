@@ -1072,31 +1072,37 @@ function addToList(type){
     });
   }
   listItems.push({id:listIdCounter++,type:tag,desc,stars,starPrices});
-  renderList();
-  renderMiniTotal();
-  // 加入清單後清空目前輸入：價格 + 鍵盤手寫數字/柱數
+
+  // 加入清單後，先清空目前輸入，再重畫畫面。
+  // 手機版與桌機版都必須走同一套，避免手機分頁/共用鍵盤沒有刷新。
   if(type==='lp'){
-    Object.keys(prices['lp']).forEach(r=>{prices['lp'][r]='';});
+    prices['lp']={};
     lpNum=0;
     lpKbInput='';
     lpStars={};
     activeStarTarget['lp']=null;
     setKbFocus('lpk');
     renderLpPanel();
+    renderKbPanel();
   }
   else if(type==='p'){
-    Object.keys(prices['p']).forEach(r=>{prices['p'][r]='';});
+    prices['p']={};
     pvals=Array(pcols).fill(0);
     pStars={};
     pillarKbIdx=0;
     activeStarTarget['p']=null;
     setKbFocus('pk');
     renderPPanel();
+    renderKbPanel();
   }
   else if(type==='mn'){
     [2,3,4,5,6,7,8,9].forEach(r=>{manualNotes[r]='';manualPrices2[r]='';});
     renderLpPanel();
+    renderKbPanel();
   }
+
+  renderList();
+  renderMiniTotal();
   const btnId=type==='lp'?'lp-add-btn':type==='p'?'p-add-btn':'mn-add-btn';
   const btn=document.getElementById(btnId);
   if(btn){const orig=btn.textContent;btn.textContent='✓ 已加入';btn.style.background='#059669';setTimeout(()=>{btn.textContent=orig;btn.style.background='';},1200);}

@@ -52,6 +52,10 @@ h1{font-size:16px;font-weight:700;letter-spacing:2px;background:linear-gradient(
 .num-picker{display:flex;flex-direction:column;align-items:center;gap:8px;padding:4px 0}
 .picker-display{font-family:'DM Mono',monospace;font-size:48px;font-weight:700;color:var(--tx);line-height:1;text-align:center}
 .picker-sub{font-size:11px;color:var(--mu);text-align:center}
+.lp-kb-row{display:flex;align-items:center;gap:7px;width:100%;max-width:240px}
+.lp-kb-input-box{flex:1;height:42px;border-radius:7px;border:2px solid var(--bd);background:var(--sf2);display:flex;align-items:center;justify-content:center;cursor:pointer;font-family:'DM Mono',monospace;font-size:22px;font-weight:700;color:var(--tx);transition:all .15s}
+.lp-kb-input-box.active{border-color:var(--ac);background:rgba(79,124,255,.18);box-shadow:0 0 0 3px rgba(79,124,255,.18),0 0 16px rgba(79,124,255,.25)}
+.lp-kb-input-box.active::after{content:'正在輸入';font-family:'Noto Sans TC',sans-serif;font-size:10px;font-weight:500;color:var(--ac);margin-left:8px}
 .picker-btns{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;width:100%}
 .pnum{height:32px;border-radius:7px;border:1px solid var(--bd);background:var(--sf2);color:var(--mu);font-family:'DM Mono',monospace;font-size:13px;cursor:pointer;transition:all .15s;display:flex;align-items:center;justify-content:center}
 .pnum.sel{background:var(--ac);border-color:var(--ac);color:#fff}
@@ -419,7 +423,7 @@ function makeResizable(panel, handle, id){
 // ════════════════════════════════════
 // 共用鍵盤焦點
 // ════════════════════════════════════
-let kbFocus = 'lp'; // 'lp','p','mn'
+let kbFocus = 'lp'; // 'lp','lpk','p','pk','mn'
 let tabOrigin = 'lp'; // Tab 循環的起點
 const prices={lp:{},p:{}};
 const activeStarTarget={lp:null,p:null};
@@ -464,6 +468,7 @@ function highlightStar(id,r){
 
 function pk(id,k){
   if(id==='mn'){ pkManual(k); return; }
+  if(id==='lpk'){ pkLpNum(k); return; }
   if(id==='pk'){ pkPillar(k); return; }
   const r=activeStarTarget[id];
   if(r===null)return;
@@ -476,7 +481,8 @@ function pk(id,k){
   if(k==='DEL'){v=v.length>1?v.slice(0,-1):'';}
   else if(k==='.'){if(!v.includes('.'))v+='.';}
   else if(k==='OK'){
-    const stars=id==='lp'?Object.keys(lpStars).map(Number):Object.keys(pStars).map(Number);
+    if(id==='lp'){ advanceLpCycle(); return; }
+    const stars=Object.keys(pStars).map(Number);
     const idx=stars.indexOf(r);
     if(idx<stars.length-1){selectStar(id,stars[idx+1]);}
     return;
@@ -491,7 +497,7 @@ function pk(id,k){
 // ════════════════════════════════════
 // 連碰
 // ════════════════════════════════════
-let lpNum=5, lpStarMax=4, lpStars={};
+let lpNum=5, lpKbInput='5', lpInputMode='pick', lpStarMax=4, lpStars={};
 
 function adjLpStar(d){lpStarMax=Math.max(2,Math.min(9,lpStarMax+d));renderLpPanel();}
 function setLpStarDirect(v){lpStarMax=Math.max(2,Math.min(9,parseInt(v)||lpStarMax));renderLpPanel();}
@@ -521,6 +527,15 @@ function renderLpPanel(id='lp'){
     </div>`;
     body.appendChild(cr);
 
+    // mode toggle（連碰頁面自己的輸入模式，像立柱一樣可切換）
+    const mt=document.createElement('div');
+    mt.style.cssText='display:flex;justify-content:flex-end;margin-bottom:6px';
+    mt.innerHTML=`<div class="mtog">
+      <button class="mbtn${lpInputMode==='pick'?' active':''}" onclick="setLpInputMode('pick')">點選</button>
+      <button class="mbtn${lpInputMode==='kb'?' active':''}" onclick="setLpInputMode('kb')">鍵盤</button>
+    </div>`;
+    body.appendChild(mt);
+
     // picker
     const picker=document.createElement('div');
     picker.className='num-picker';
@@ -528,18 +543,30 @@ function renderLpPanel(id='lp'){
     lpStars={};
     for(let r=2;r<=showMax;r++){ lpStars[r]=C(n,r); }
     let btns='';
-    for(let i=2;i<=20;i++) btns+=`<button class="pnum${i===lpNum?' sel':''}" onclick="setLpNum(${i})">${i}</button>`;
+    if(lpInputMode==='pick'){
+      for(let i=2;i<=20;i++) btns+=`<button class="pnum${i===lpNum?' sel':''}" onclick="setLpNum(${i})">${i}</button>`;
+    }
     const prev=Object.entries(lpStars).map(([r,cnt])=>`<span style="color:${SC[r]}">${SL[r]}</span> <b>${cnt}</b>注`).join('　');
-    picker.innerHTML=`<div><div style="font-family:'DM Mono',monospace;font-size:48px;font-weight:700;color:var(--tx);text-align:center;line-height:1">${lpNum}</div><div style="font-size:11px;color:var(--mu);text-align:center">個號碼</div></div>
-      <div class="picker-btns">${btns}</div>
-      <div class="star-preview">${prev}</div>`;
+    const sub=lpInputMode==='kb'?'個號碼 · 手打輸入中':'個號碼 · 點選輸入';
+    const lpKbActive = lpInputMode==='kb' && kbFocus==='lpk';
+    picker.innerHTML=lpInputMode==='kb'
+      ? `<div class="lp-kb-row"><span class="plbl" style="width:42px">連碰</span><div id="lpkb-main" class="lp-kb-input-box ${lpKbActive?'active':''}" onclick="setKbFocus('lpk');renderLpPanel()">${lpNum||'—'}</div></div>
+        <div style="font-size:11px;color:var(--mu);text-align:center;line-height:1.8">藍框亮在「連碰」＝正在輸入數字<br>Enter/Tab：連碰 → 二星 → 三星 → 四星 → 回連碰</div>
+        <div class="star-preview">${prev}</div>`
+      : `<div><div style="font-family:'DM Mono',monospace;font-size:48px;font-weight:700;color:var(--tx);text-align:center;line-height:1">${lpNum||'—'}</div><div style="font-size:11px;color:var(--mu);text-align:center">${sub}</div></div>
+        <div class="picker-btns">${btns}</div>
+        <div class="star-preview">${prev}</div>`;
     body.appendChild(picker);
+    if(lpInputMode==='kb') setKbFocus('lpk');
 
     // price grid
     const pg=document.createElement('div');
     pg.innerHTML='<div style="font-size:10px;color:var(--mu);margin-bottom:4px">各星價格（百元）</div>';
     body.appendChild(pg);
     buildPriceGrid('lp',Object.keys(lpStars).map(Number),body);
+    if(kbFocus==='lpk'){
+      document.querySelectorAll('#lp-spg .sp-val').forEach(el=>el.classList.remove('active'));
+    }
 
     const ab=document.createElement('button');
     ab.className='add-btn'; ab.id='lp-add-btn'; ab.textContent='＋ 加入清單';
@@ -551,8 +578,77 @@ function renderLpPanel(id='lp'){
 }
 
 let lpSubTab='lp';
-function setLpSubTab(t){lpSubTab=t;renderLpPanel();if(t==='mn')setKbFocus('mn');}
-function setLpNum(n){lpNum=n;renderLpPanel();}
+function setLpSubTab(t){lpSubTab=t;renderLpPanel();if(t==='mn')setKbFocus('mn');else setKbFocus(lpInputMode==='kb'?'lpk':'lp');}
+function setLpInputMode(m){
+  lpInputMode=m;
+  lpKbInput=lpNum?String(lpNum):'';
+  renderLpPanel();
+  setKbFocus(m==='kb'?'lpk':'lp');
+}
+function setLpNum(n){
+  lpNum=Math.max(0,Math.min(39,parseInt(n)||0));
+  lpKbInput=lpNum?String(lpNum):'';
+  renderLpPanel();
+}
+function getLpCycleStars(){
+  return [2,3,4].filter(r=>lpStars && lpStars[r]!==undefined);
+}
+function focusLpNumber(){
+  if(lpInputMode!=='kb') lpInputMode='kb';
+  setKbFocus('lpk');
+  renderLpPanel();
+}
+function focusLpFirstStar(){
+  setKbFocus('lp');
+  const stars=getLpCycleStars();
+  if(stars.length) selectStar('lp',stars[0]);
+}
+function advanceLpCycle(){
+  if(kbFocus==='lpk'){
+    if(lpNum<2) lpNum=2;
+    lpKbInput=String(lpNum);
+    renderLpPanel();
+    focusLpFirstStar();
+    return;
+  }
+  if(kbFocus==='lp'){
+    const stars=getLpCycleStars();
+    const cur=activeStarTarget['lp'];
+    const idx=stars.indexOf(cur);
+    if(idx>=0 && idx<stars.length-1){ selectStar('lp',stars[idx+1]); }
+    else { focusLpNumber(); }
+  }
+}
+
+function pkLpNum(k){
+  if(k==='C'){ lpKbInput=''; lpNum=0; renderLpPanel(); return; }
+  if(k==='DEL'){ lpKbInput=lpKbInput.slice(0,-1); lpNum=parseInt(lpKbInput)||0; renderLpPanel(); return; }
+  if(k==='OK'||k==='.') {
+    advanceLpCycle();
+    return;
+  }
+  const n=parseInt(k);
+  if(isNaN(n)) return;
+  let next=(lpKbInput+k).replace(/^0+(?=\d)/,'');
+  if(next.length>2 || (parseInt(next)||0)>39) next=String(n);
+  lpKbInput=next;
+  lpNum=parseInt(lpKbInput)||0;
+  renderLpPanel();
+}
+function switchMainMode(mode){
+  if(mode==='lp'){
+    if(document.getElementById('page-lp')) setPage('lp');
+    if(typeof setLpSubTab==='function') setLpSubTab('lp');
+    setKbFocus('lpk');
+    renderLpPanel();
+  } else if(mode==='p'){
+    if(document.getElementById('page-p')) setPage('p');
+    inputMode='kb';
+    pillarKbIdx=0;
+    setKbFocus('pk');
+    renderPPanel();
+  }
+}
 
 // ════════════════════════════════════
 // 手動補入
@@ -917,10 +1013,10 @@ function renderKbPanel2(id){
   const body=document.getElementById('pb-kb');
   if(!body)return;
   body.innerHTML='';
-  const focusName={lp:'連碰',p:'立柱',pk:'立柱鍵盤',mn:'手動'}[kbFocus]||'—';
-  const badge=`<span class="kp-badge ${{lp:'lp',p:'pi',pk:'pi',mn:'mn'}[kbFocus]||'lp'}">${focusName}</span>`;
+  const focusName={lp:'連碰價格',lpk:'連碰數字',p:'立柱價格',pk:'立柱數字',mn:'手動'}[kbFocus]||'—';
+  const badge=`<span class="kp-badge ${{lp:'lp',lpk:'lp',p:'pi',pk:'pi',mn:'mn'}[kbFocus]||'lp'}">${focusName}</span>`;
   const r=kbFocus==='mn'?manualActiveR:activeStarTarget[kbFocus];
-  const hint=r?SL[r]+(kbFocus==='mn'&&manualInputField==='notes'?' 注數':' 價格'):'點選欄位';
+  const hint=kbFocus==='lpk'?('目前 '+(lpNum||'—')+' 個號碼'):(r?SL[r]+(kbFocus==='mn'&&manualInputField==='notes'?' 注數':' 價格'):'點選欄位');
   body.innerHTML=`<div class="kp-status">${badge}<span style="color:var(--mu);font-size:10px">${hint}</span></div>
     <div class="kp-grid">
       <button class="key" onclick="pk('${kbFocus}','7')">7</button>
@@ -1102,17 +1198,25 @@ document.addEventListener('keydown',function(e){
   if(document.activeElement && document.activeElement.classList.contains('cv-input')) return;
   const onList=document.getElementById('page-list').classList.contains('active');
   const key=e.key;
-  if(key==='Tab'){
+  const code=e.code;
+  if(code==='NumpadDivide' || key==='/'){
+    e.preventDefault();
+    switchMainMode('lp');
+    return;
+  }
+  if(code==='NumpadMultiply' || key==='*'){
+    e.preventDefault();
+    switchMainMode('p');
+    return;
+  }
+  if(key==='Tab'||key==='Enter'){
     e.preventDefault();
     const inManual = (kbFocus==='mn');
     const inPillar = (kbFocus==='p' || kbFocus==='pk');
     if(!inManual){
       // ── 連碰/立柱模式 ──
-      if(kbFocus==='lp'){
-        const stars=Object.keys(lpStars).map(Number).sort((a,b)=>a-b);
-        const cur=activeStarTarget['lp'], idx=stars.indexOf(cur);
-        if(idx>=0 && idx<stars.length-1){ selectStar('lp',stars[idx+1]); }
-        else { if(stars.length) selectStar('lp',stars[0]); }
+      if(kbFocus==='lpk' || kbFocus==='lp'){
+        advanceLpCycle();
       } else if(kbFocus==='pk'){
         if(pillarKbIdx<pcols-1){ pillarKbIdx++; renderPPanel(); }
         else { setKbFocus('p'); const ps=Object.keys(pStars).map(Number).sort((a,b)=>a-b); if(ps.length) selectStar('p',ps[0]); }
@@ -1153,7 +1257,6 @@ document.addEventListener('keydown',function(e){
   else if(key==='.'){pk(kbFocus,'.');e.preventDefault();}
   else if(key==='Backspace'){pk(kbFocus,'DEL');e.preventDefault();}
   else if(key==='Delete'||key==='Escape'){pk(kbFocus,'C');e.preventDefault();}
-  else if(key==='Enter'){pk(kbFocus,'OK');e.preventDefault();}
   else if(key==='+'||key==='='){
     if(kbFocus==='lp')addToList('lp');
     else if(kbFocus==='p')addToList('p');
@@ -1168,11 +1271,13 @@ document.addEventListener('keydown',function(e){
   }
   else if(key==='ArrowDown'||key==='ArrowRight'){
     if(kbFocus==='mn'){const s=Array.from({length:manualStarMax-1},(_,i)=>i+2);const i=s.indexOf(manualActiveR);if(i<s.length-1){manualActiveR=s[i+1];highlightManualR();renderKbPanel2('kb');}}
+    else if(kbFocus==='lpk'){ pkLpNum('OK'); }
     else{const stars=kbFocus==='lp'?Object.keys(lpStars).map(Number):Object.keys(pStars).map(Number);if(!stars.length)return;const cur=activeStarTarget[kbFocus];const idx=stars.indexOf(cur);selectStar(kbFocus,stars[(idx+1)%stars.length]);}
     e.preventDefault();
   }
   else if(key==='ArrowUp'||key==='ArrowLeft'){
     if(kbFocus==='mn'){const s=Array.from({length:manualStarMax-1},(_,i)=>i+2);const i=s.indexOf(manualActiveR);if(i>0){manualActiveR=s[i-1];highlightManualR();renderKbPanel2('kb');}}
+    else if(kbFocus==='lpk'){ pkLpNum('DEL'); }
     else{const stars=kbFocus==='lp'?Object.keys(lpStars).map(Number):Object.keys(pStars).map(Number);if(!stars.length)return;const cur=activeStarTarget[kbFocus];const idx=stars.indexOf(cur);selectStar(kbFocus,stars[(idx-1+stars.length)%stars.length]);}
     e.preventDefault();
   }

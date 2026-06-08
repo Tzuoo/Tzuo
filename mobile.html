@@ -1321,10 +1321,13 @@ document.addEventListener('keydown',function(e){
   }
   if(onList)return;
   // 面板頁
+  // F20/實體數字鍵盤的小數點在部分瀏覽器會回報：
+  // code=NumpadDecimal，但 key 可能是 Delete、Decimal、.、,。
+  // 必須先判斷 code，否則會被下面 Delete 清除功能吃掉。
   if(key>='0'&&key<='9'){pk(kbFocus,key);e.preventDefault();}
-  else if(key==='.'){pk(kbFocus,'.');e.preventDefault();}
+  else if(code==='NumpadDecimal' || key==='.' || key==='Decimal' || key===','){pk(kbFocus,'.');e.preventDefault();}
   else if(key==='Backspace'){pk(kbFocus,'DEL');e.preventDefault();}
-  else if(key==='Delete'||key==='Escape'){pk(kbFocus,'C');e.preventDefault();}
+  else if((key==='Delete' && code!=='NumpadDecimal')||key==='Escape'){pk(kbFocus,'C');e.preventDefault();}
   else if(key==='+'||key==='='){
     if(kbFocus==='lp')addToList('lp');
     else if(kbFocus==='p')addToList('p');
@@ -1351,9 +1354,91 @@ document.addEventListener('keydown',function(e){
   }
 });
 
+
+// ════════════════════════════════════
+// 使用狀態保存：上限、星數、輸入內容、清單紀錄，下次開啟自動還原
+// ════════════════════════════════════
+const APP_STATE_KEY = '539appStatePersistent_mobile_v3';
+let __appStateSaveTimer = null;
+let __appStateLoading = false;
+function clonePlain(obj){ return JSON.parse(JSON.stringify(obj || {})); }
+function saveAppState(){
+  if(__appStateLoading) return;
+  clearTimeout(__appStateSaveTimer);
+  __appStateSaveTimer = setTimeout(()=>{
+    try{
+      const state={
+        version:3,
+        savedAt:Date.now(),
+        kbFocus, tabOrigin,
+        prices:clonePlain(prices),
+        activeStarTarget:clonePlain(activeStarTarget),
+        lpNum, lpKbInput, lpInputMode, lpStarMax, lpSubTab,
+        manualActiveR, manualInputField, manualStarMax,
+        manualNotes:clonePlain(manualNotes),
+        manualPrices2:clonePlain(manualPrices2),
+        pcols, maxNum, pStarMax, pvals:[...pvals], inputMode, pillarKbIdx, autoJump,
+        listItems:clonePlain(listItems),
+        listIdCounter
+      };
+      localStorage.setItem(APP_STATE_KEY, JSON.stringify(state));
+    }catch(e){}
+  }, 30);
+}
+function loadAppState(){
+  try{
+    const raw=localStorage.getItem(APP_STATE_KEY);
+    if(!raw) return;
+    const s=JSON.parse(raw);
+    if(!s || typeof s!=='object') return;
+    __appStateLoading=true;
+    if(s.prices){ prices.lp={...(s.prices.lp||{})}; prices.p={...(s.prices.p||{})}; }
+    if(s.activeStarTarget){ activeStarTarget.lp=s.activeStarTarget.lp??null; activeStarTarget.p=s.activeStarTarget.p??null; }
+    if(typeof s.kbFocus==='string') kbFocus=s.kbFocus;
+    if(typeof s.tabOrigin==='string') tabOrigin=s.tabOrigin;
+    if(Number.isFinite(+s.lpNum)) lpNum=+s.lpNum;
+    if(typeof s.lpKbInput==='string') lpKbInput=s.lpKbInput;
+    if(typeof s.lpInputMode==='string') lpInputMode=s.lpInputMode;
+    if(Number.isFinite(+s.lpStarMax)) lpStarMax=Math.max(2,Math.min(9,+s.lpStarMax));
+    if(typeof s.lpSubTab==='string') lpSubTab=s.lpSubTab;
+    if(Number.isFinite(+s.manualActiveR)) manualActiveR=Math.max(2,Math.min(9,+s.manualActiveR));
+    if(typeof s.manualInputField==='string') manualInputField=s.manualInputField;
+    if(Number.isFinite(+s.manualStarMax)) manualStarMax=Math.max(2,Math.min(9,+s.manualStarMax));
+    if(s.manualNotes) Object.assign(manualNotes, s.manualNotes);
+    if(s.manualPrices2) Object.assign(manualPrices2, s.manualPrices2);
+    if(Number.isFinite(+s.pcols)) pcols=Math.max(2,Math.min(10,+s.pcols));
+    if(Number.isFinite(+s.maxNum)) maxNum=Math.max(1,Math.min(99,+s.maxNum));
+    if(Number.isFinite(+s.pStarMax)) pStarMax=Math.max(2,Math.min(9,+s.pStarMax));
+    if(Array.isArray(s.pvals)){ pvals=s.pvals.slice(0,pcols).map(v=>Math.max(0,Math.min(maxNum,parseInt(v)||0))); while(pvals.length<pcols)pvals.push(1); }
+    if(typeof s.inputMode==='string') inputMode=s.inputMode;
+    if(Number.isFinite(+s.pillarKbIdx)) pillarKbIdx=Math.max(0,Math.min(pcols-1,+s.pillarKbIdx));
+    if(typeof s.autoJump==='boolean') autoJump=s.autoJump;
+    if(Array.isArray(s.listItems)) listItems=s.listItems;
+    if(Number.isFinite(+s.listIdCounter)) listIdCounter=+s.listIdCounter;
+  }catch(e){}
+  finally{ __appStateLoading=false; }
+}
+function installAppAutoSave(){
+  const names=['setPage','setKbFocus','selectStar','pk','setLpSubTab','setLpInputMode','setLpNum','adjLpStar','setLpStarDirect','pkLpNum','switchMainMode','advanceLpCycle','adjManualStar','selectManualR','pkManual','adjCols','setColsDirect','adjMaxNum','setMaxNumDirect','adjPStar','setPStarDirect','setInputMode','setPillarKbIdx','setPVal','setPvalDirect','pkPillar','addToList','delItem','clearList'];
+  names.forEach(name=>{
+    const fn=window[name];
+    if(typeof fn==='function' && !fn.__autosaveWrapped){
+      const wrapped=function(...args){ const ret=fn.apply(this,args); saveAppState(); return ret; };
+      wrapped.__autosaveWrapped=true;
+      window[name]=wrapped;
+    }
+  });
+  document.addEventListener('input',()=>saveAppState(),true);
+  document.addEventListener('change',()=>saveAppState(),true);
+  document.addEventListener('click',()=>setTimeout(saveAppState,0),true);
+  window.addEventListener('beforeunload',()=>{ try{localStorage.setItem(APP_STATE_KEY, localStorage.getItem(APP_STATE_KEY)||'{}');}catch(e){} saveAppState(); });
+}
+
 // ════════════════════════════════════
 // 初始化面板
 // ════════════════════════════════════
+loadAppState();
+installAppAutoSave();
 const vw=Math.min(window.innerWidth,520);
 const fullW=Math.max(320, vw-16);
 
@@ -1376,8 +1461,11 @@ if(window.innerWidth>900){
   });
 }
 moveSharedPanels('lp');
+renderList();
+renderMiniTotal();
+saveAppState();
 </script>
-<!-- build: total-mini-table-hundred-decimal-fixed -->
+<!-- build: total-mini-table-hundred-decimal-fixed-persistent-state -->
 <!-- self-test: 6*1.332=7.992, 4*2.741=10.964, 1*3.653=3.653 -->
 </body>
 </html>

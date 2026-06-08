@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>539 查表工具 v2 - 小表百元小數修正版</title>
+<title>539 查表工具 v2 - NUM連碰 /斜線立柱 真正修正版</title>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#0f1117;--sf:#1a1d27;--sf2:#22263a;--bd:#2e3450;--ac:#4f7cff;--ac2:#7c5fff;--tx:#e8eaf6;--mu:#7880a0;--c2:#60a5fa;--c3:#34d399;--c4:#fbbf24;--c5:#f87171;--c6:#c084fc}
@@ -167,7 +167,7 @@ h1{font-size:16px;font-weight:700;letter-spacing:2px;background:linear-gradient(
 </head>
 <body>
 <header>
-  <h1>539 查表工具 v2 <span style="font-size:10px;color:var(--mu);-webkit-text-fill-color:var(--mu);background:none">小數列修正版 20260604</span></h1>
+  <h1>539 查表工具 v2 <span style="font-size:10px;color:var(--mu);-webkit-text-fill-color:var(--mu);background:none">NUM連碰 /斜線立柱 修正版 20260608</span></h1>
   <div class="ptabs">
     <div class="ptab active" data-page="lp" onclick="setPage('lp')">連碰/手動</div>
     <div class="ptab" data-page="p" onclick="setPage('p')">立柱</div>
@@ -1243,7 +1243,8 @@ document.addEventListener('keydown',function(e){
   const key=e.key;
   const code=e.code;
   // F20 實體數字鍵盤切換：NUM = 連碰，/ = 立柱
-  if(code==='NumLock' || key==='NumLock'){
+  // 不同鍵盤/瀏覽器可能把 NUM 回報成 NumLock、NumpadClear 或 Clear，所以全部支援。
+  if(code==='NumLock' || key==='NumLock' || code==='NumpadClear' || key==='Clear'){
     e.preventDefault();
     switchMainMode('lp');
     return;
@@ -1253,6 +1254,7 @@ document.addEventListener('keydown',function(e){
     switchMainMode('p');
     return;
   }
+  // 注意：NumpadMultiply / * 已取消切換功能，避免仍跳到立柱。
   if(key==='Tab'||key==='Enter'){
     e.preventDefault();
     const inManual = (kbFocus==='mn');

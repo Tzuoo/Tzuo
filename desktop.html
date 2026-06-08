@@ -1199,12 +1199,13 @@ document.addEventListener('keydown',function(e){
   const onList=document.getElementById('page-list').classList.contains('active');
   const key=e.key;
   const code=e.code;
-  if(code==='NumpadDivide' || key==='/'){
+  // F20 實體數字鍵盤切換：NUM = 連碰，/ = 立柱
+  if(code==='NumLock' || key==='NumLock'){
     e.preventDefault();
     switchMainMode('lp');
     return;
   }
-  if(code==='NumpadMultiply' || key==='*'){
+  if(code==='NumpadDivide' || key==='/'){
     e.preventDefault();
     switchMainMode('p');
     return;

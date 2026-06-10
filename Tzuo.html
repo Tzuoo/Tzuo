@@ -8,24 +8,60 @@
 :root{
   --bg:#0f1117;--panel:#1a1d27;--panel2:#22263a;--line:#2e3450;
   --text:#e8eaf6;--muted:#8790ae;--blue:#60a5fa;--green:#34d399;
-  --yellow:#fbbf24;--red:#f87171;--purple:#c084fc;--accent:#4f7cff;
+  --yellow:#fbbf24;--red:#f87171;--purple:#c084fc;--accent:#4f7cff;--font-scale:1;
+  --header:#0f1117;--field:#111522;--button:#151928;--disabled:#0d1018;
+  --on-control:#fff;--title:#9db5ff;--panel-title:#c7d2fe;--highlight:#bfdbfe;
+  --total-head:rgba(79,124,255,.12);--total-grand:rgba(79,124,255,.17);--shadow:rgba(0,0,0,.28);
 }
+[data-theme="light"]{
+  --bg:#f5f0e8;--panel:#fffdf9;--panel2:#edeafb;--line:#c9c4dc;
+  --text:#25253a;--muted:#68677c;--blue:#315fbd;--green:#16806c;
+  --yellow:#b76a16;--red:#c34f5b;--purple:#8053b8;--accent:#586fc4;
+  --header:#fff8ef;--field:#fffaf2;--button:#f0edf9;--disabled:#e9e5e0;
+  --on-control:#25253a;--title:#6950a1;--panel-title:#4d4779;--highlight:#405ca3;
+  --total-head:rgba(88,111,196,.12);--total-grand:rgba(88,111,196,.17);--shadow:rgba(74,65,105,.18);
+}
+[data-theme="light"] body{
+  background:
+    radial-gradient(circle at 8% 2%,rgba(255,210,172,.34),transparent 28%),
+    radial-gradient(circle at 92% 8%,rgba(192,202,255,.36),transparent 30%),
+    var(--bg);
+}
+[data-theme="light"] header{background:linear-gradient(105deg,#fff5e8 0%,#f4f0ff 52%,#ebf6f3 100%)}
+[data-theme="light"] .display-tools button{background:rgba(255,255,255,.66);box-shadow:0 2px 6px rgba(74,65,105,.09)}
+[data-theme="light"] .tab.active{background:linear-gradient(180deg,#fffdf9,#ece8fa);border-color:#bdb6d8;color:#4a3e73}
+[data-theme="light"] .panel{border-color:#c5bfd9;box-shadow:0 7px 22px var(--shadow)}
+[data-theme="light"] .panel-head{background:linear-gradient(90deg,#e9e7fa,#eeeaf7 55%,#e2f1ee)}
+[data-theme="light"] .number-display,
+[data-theme="light"] .price,
+[data-theme="light"] .pillar{box-shadow:inset 0 1px 3px rgba(90,73,48,.07)}
+[data-theme="light"] .mode-btn.active{background:#fff5df;box-shadow:0 0 0 2px rgba(183,106,22,.13)}
+[data-theme="light"] .calc-card:first-child{background:linear-gradient(135deg,#f3ecff,#fff8f1);border-color:#d7c8eb}
+[data-theme="light"] .calc-card:nth-child(2){background:linear-gradient(135deg,#e9f7f2,#fffaf0);border-color:#bfddd3}
+[data-theme="light"] .card-title{background:linear-gradient(90deg,#ece9fa,#e6f3f0);color:#514d73}
+[data-theme="light"] .total-grand{background:linear-gradient(90deg,#e3e9fb,#e9f3f1);color:#334f91}
+[data-theme="light"] .total-head{background:linear-gradient(90deg,#f0ecfa,#eaf3f4)}
+[data-theme="light"] .key-binding,
+[data-theme="light"] .key-add{box-shadow:0 2px 5px rgba(74,65,105,.08)}
 *{box-sizing:border-box}
 html,body{margin:0;min-height:100%;background:var(--bg);color:var(--text);font-family:"Microsoft JhengHei","Noto Sans TC",sans-serif}
 button,input{font:inherit}
 button{cursor:pointer}
-header{position:sticky;top:0;z-index:1000;background:#0f1117;border-bottom:1px solid var(--line);padding:10px 12px 0}
-h1{margin:0 0 8px;text-align:center;font-size:16px;color:#9db5ff}
-.tabs{display:flex;justify-content:center;gap:5px}
+header{position:sticky;top:0;z-index:1000;background:var(--header);border-bottom:1px solid var(--line);padding:10px 12px 0}
+h1{margin:0 0 8px;text-align:center;font-size:16px;color:var(--title)}
+.tabs{display:flex;justify-content:center;gap:5px;flex-wrap:wrap}
+.display-tools{display:flex;justify-content:center;align-items:center;gap:6px;padding:0 0 7px}
+.display-tools button{min-width:38px;padding:5px 9px;border:1px solid var(--line);border-radius:7px;background:var(--panel2);color:var(--on-control);font-weight:800}
+.display-tools .font-value{min-width:58px;color:var(--highlight);text-align:center;font-weight:800}
 .tab{padding:8px 18px;border:1px solid transparent;border-bottom:0;border-radius:8px 8px 0 0;background:transparent;color:var(--muted)}
-.tab.active{background:var(--panel);border-color:var(--line);color:#fff}
+.tab.active{background:var(--panel);border-color:var(--line);color:var(--on-control)}
 .badge{display:none;margin-left:4px;padding:1px 6px;border-radius:8px;background:var(--accent);color:#fff;font-size:10px}
 .page{display:none;padding:10px 10px 80px}
 .page.active{display:block}
 .workspace{position:relative;min-height:1050px}
-.panel{position:absolute;background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:0 4px 18px rgba(0,0,0,.28);min-width:280px;overflow:hidden}
+.panel{position:absolute;background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:0 4px 18px var(--shadow);min-width:280px;overflow:hidden}
 .panel-head{height:36px;padding:0 10px;background:var(--panel2);border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;cursor:grab;touch-action:none;user-select:none}
-.panel-title{font-size:12px;font-weight:800;letter-spacing:1px;color:#c7d2fe}
+.panel-title{font-size:12px;font-weight:800;letter-spacing:1px;color:var(--panel-title)}
 .collapse{width:23px;height:23px;border:0;border-radius:5px;background:transparent;color:var(--muted);font-size:15px}
 .panel-body{padding:11px}
 .panel.collapsed{height:36px!important;min-height:36px!important}
@@ -35,30 +71,42 @@ h1{margin:0 0 8px;text-align:center;font-size:16px;color:#9db5ff}
 .section:last-child{border-bottom:0}
 .section-title{margin-bottom:7px;font-size:11px;font-weight:700;color:var(--muted)}
 .mode-row,.control-row,.price-row,.actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
-.mode-btn{flex:1;min-width:100px;padding:10px;border:1px solid var(--line);border-radius:9px;background:#151928;color:var(--muted);font-weight:800}
-.mode-btn.active{border-color:var(--yellow);color:#fff;box-shadow:0 0 0 2px rgba(251,191,36,.15)}
+.mode-btn{flex:1;min-width:100px;padding:10px;border:1px solid var(--line);border-radius:9px;background:var(--button);color:var(--muted);font-weight:800}
+.mode-btn.active{border-color:var(--yellow);color:var(--on-control);box-shadow:0 0 0 2px rgba(251,191,36,.15)}
 .control{display:flex;align-items:center;border:1px solid var(--line);border-radius:18px;overflow:hidden;background:var(--panel2)}
-.control button{width:30px;height:30px;border:0;background:transparent;color:#fff}
+.control button{width:30px;height:30px;border:0;background:transparent;color:var(--on-control)}
 .control span{padding:0 5px;font-size:11px;color:var(--muted)}
 .direct{width:36px;border:0;outline:0;background:transparent;color:var(--blue);text-align:center;font-weight:800}
-.number-display{width:100%;min-height:78px;padding:12px;border:2px solid var(--line);border-radius:12px;background:#111522;display:flex;align-items:center;justify-content:center;text-align:center;font-family:Consolas,monospace;font-size:48px;font-weight:800;line-height:1.16;overflow-wrap:anywhere;word-break:break-word}
+.number-display{width:100%;min-height:78px;padding:12px;border:2px solid var(--line);border-radius:12px;background:var(--field);display:flex;align-items:center;justify-content:center;text-align:center;font-family:Consolas,monospace;font-size:48px;font-weight:800;line-height:1.16;overflow-wrap:anywhere;word-break:break-word}
 .number-display.focused{border-color:var(--yellow);box-shadow:0 0 0 3px rgba(251,191,36,.14)}
 .pillar-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin:8px 0}
-.pillar{min-height:52px;border:2px solid var(--line);border-radius:9px;background:#111522;color:#fff;font-family:Consolas,monospace;font-size:21px;font-weight:800}
+.pillar{min-height:52px;border:2px solid var(--line);border-radius:9px;background:var(--field);color:var(--on-control);font-family:Consolas,monospace;font-size:21px;font-weight:800}
 .pillar.active{border-color:var(--yellow)}
 .preview{margin-top:8px;line-height:1.9;font-size:12px;color:var(--muted)}
 .price-row{margin-bottom:6px}
 .price-row label{width:45px;font-size:12px;font-weight:700}
-.price{flex:1;min-width:90px;padding:9px;border:1px solid var(--line);border-radius:8px;background:#111522;color:#fff;text-align:right;font-family:Consolas,monospace}
+.price{flex:1;min-width:90px;padding:9px;border:1px solid var(--line);border-radius:8px;background:var(--field);color:var(--on-control);text-align:right;font-family:Consolas,monospace}
 .price-row.disabled{opacity:.38}
-.price-row.disabled .price{cursor:not-allowed;background:#0d1018;color:var(--muted)}
-.actions button{flex:1;padding:9px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);color:#fff}
-.actions .primary{background:var(--accent);border-color:var(--accent);font-weight:800}
+.price-row.disabled .price{cursor:not-allowed;background:var(--disabled);color:var(--muted)}
+.actions button{flex:1;padding:9px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);color:var(--on-control)}
+.actions .primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:800}
 .actions .danger{color:var(--red)}
 .star-summary{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;font-size:13px;font-weight:700}
+.calc-cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:8px 0}
+.calc-card{padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--field)}
+.calc-card-title{margin-bottom:6px;font-weight:800}
+.calc-card-value{font-family:Consolas,monospace;font-size:calc(26px * var(--font-scale));font-weight:800}
+.calc-card-note{margin-top:5px;color:var(--muted);font-size:calc(11px * var(--font-scale));line-height:1.6}
+.car-layout .calc-cards{margin:6px 0}
+.car-layout .calc-card{display:grid;grid-template-columns:auto 1fr;column-gap:10px;align-items:center;padding:8px 10px}
+.car-layout .calc-card-title{margin:0}
+.car-layout .calc-card-value{font-size:calc(21px * var(--font-scale));text-align:right}
+.car-layout .calc-card-note{grid-column:1/-1;margin-top:3px;line-height:1.35}
+.car-layout .number-display{min-height:58px;padding:7px}
+.car-layout .section{padding:6px 0}
 .total-head,.total-row{display:flex;align-items:center;gap:4px;padding:6px;border-bottom:1px solid var(--line)}
-.total-head{background:rgba(79,124,255,.12);font-weight:800}
-.total-grand{display:flex;justify-content:space-between;padding:9px;background:rgba(79,124,255,.17);border-bottom:2px solid var(--accent);color:#bfdbfe;font-weight:800}
+.total-head{background:var(--total-head);font-weight:800}
+.total-grand{display:flex;justify-content:space-between;padding:9px;background:var(--total-grand);border-bottom:2px solid var(--accent);color:var(--highlight);font-weight:800}
 .cell-index{width:28px;flex:none;color:var(--muted);font-size:11px}
 .cell-star{flex:1;text-align:right;font-family:Consolas,monospace;font-size:12px}
 .delete{width:24px;height:24px;border:0;background:transparent;color:var(--muted);font-size:17px}
@@ -80,7 +128,7 @@ h1{margin:0 0 8px;text-align:center;font-size:16px;color:#9db5ff}
 .key-row{display:grid;grid-template-columns:minmax(110px,180px) 1fr;gap:10px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--line)}
 .key-label{font-weight:800;font-size:13px}
 .key-bindings{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
-.key-binding,.key-add{padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:#111522;color:#bfdbfe}
+.key-binding,.key-add{padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--field);color:var(--highlight)}
 .key-binding{display:inline-flex;gap:8px;align-items:center}
 .key-remove{color:var(--muted);font-weight:800}
 .key-add{color:var(--green)}
@@ -88,26 +136,57 @@ h1{margin:0 0 8px;text-align:center;font-size:16px;color:#9db5ff}
 .key-capture{position:fixed;inset:0;z-index:4000;display:none;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,.68)}
 .key-capture.open{display:flex}
 .key-capture-box{width:min(380px,100%);padding:24px;border:1px solid var(--line);border-radius:14px;background:var(--panel);text-align:center;box-shadow:0 18px 50px rgba(0,0,0,.45)}
-.key-capture-title{font-size:18px;font-weight:800;color:#fff}
+.key-capture-title{font-size:18px;font-weight:800;color:var(--on-control)}
 .key-capture-help{margin:10px 0 18px;color:var(--muted);font-size:13px;line-height:1.7}
+.calculator{width:min(460px,100%);margin:auto;border:1px solid var(--line);border-radius:16px;background:var(--panel);box-shadow:0 8px 28px var(--shadow);overflow:hidden}
+.calc-screen{display:grid;grid-template-rows:minmax(calc(30px * var(--font-scale)),auto) minmax(calc(66px * var(--font-scale)),auto);padding:12px 18px;background:var(--field);border-bottom:1px solid var(--line);text-align:right}
+.calc-expression{display:flex;align-items:center;justify-content:flex-end;min-width:0;padding-bottom:7px;border-bottom:1px solid var(--line);color:var(--muted);font-family:Consolas,monospace;font-size:calc(14px * var(--font-scale));line-height:1.35;white-space:nowrap;overflow-x:auto;overflow-y:hidden}
+.calc-display{display:flex;align-items:center;justify-content:flex-end;min-width:0;padding-top:8px;line-height:1.15;white-space:nowrap;overflow-x:auto;overflow-y:hidden;font-family:Consolas,monospace;font-size:calc(38px * var(--font-scale));font-weight:800}
+.calc-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;padding:12px}
+.calc-key{min-height:58px;border:1px solid var(--line);border-radius:10px;background:var(--button);color:var(--on-control);font-size:calc(20px * var(--font-scale));font-weight:800}
+.calc-key:hover,.calc-key:focus{border-color:var(--accent)}
+.calc-key.operator{background:var(--panel2);color:var(--highlight)}
+.calc-key.clear{color:var(--red)}
+.calc-key.equals{background:var(--accent);border-color:var(--accent);color:#fff}
+.calc-note{padding:0 14px 14px;color:var(--muted);font-size:calc(11px * var(--font-scale));text-align:center}
+[data-theme="light"] .calculator{background:rgba(255,253,249,.92)}
+[data-theme="light"] .calc-screen{background:linear-gradient(135deg,#fff8ec,#f0edff)}
+[data-theme="light"] .calc-key.operator{background:linear-gradient(135deg,#ece9fa,#e7f3f0)}
 .status{position:fixed;left:50%;top:72px;z-index:3000;transform:translateX(-50%);display:none;padding:8px 14px;border-radius:8px;background:#047857;color:#fff;font-size:13px;font-weight:800}
+h1{font-size:calc(16px * var(--font-scale))}
+.tab,.display-tools,.mode-btn,.actions button,.key-binding,.key-add,.key-capture-help{font-size:calc(14px * var(--font-scale))}
+.panel-title,.section-title,.preview,.price-row label,.details,.empty,.key-intro,.card-title{font-size:calc(12px * var(--font-scale))}
+.direct,.price,.desc,.star-summary,.total-grand,.total-head,.total-row,.list-total-row,.key-label{font-size:calc(14px * var(--font-scale))}
+.pillar{font-size:calc(21px * var(--font-scale))}
+.number-display{font-size:calc(48px * var(--font-scale))}
+.badge,.tag{font-size:calc(10px * var(--font-scale))}
+.cell-index,.cell-star{font-size:calc(12px * var(--font-scale))}
 @media(max-width:900px){
   .tab{flex:1;padding:8px 3px}
   .workspace{min-height:1250px}
   .panel{min-width:250px}
   .pillar-grid{grid-template-columns:repeat(4,1fr)}
   .key-row{grid-template-columns:1fr}
+  .calc-cards{grid-template-columns:1fr}
 }
 </style>
 </head>
 <body>
 <header>
   <h1>Tzuo</h1>
+  <div class="display-tools">
+    <button id="fontDown" title="縮小字體">A−</button>
+    <span id="fontValue" class="font-value">100%</span>
+    <button id="fontUp" title="放大字體">A＋</button>
+    <button id="fontReset" title="恢復預設字體">重設</button>
+    <button id="themeToggle" title="切換深淺色模式">淺色</button>
+  </div>
   <div class="tabs">
     <button class="tab active" data-page="old">舊版輸入</button>
     <button class="tab" data-page="new">新版組數</button>
     <button class="tab" data-page="list">清單<span id="listBadge" class="badge"></span></button>
     <button class="tab" data-page="keys">快捷鍵</button>
+    <button class="tab" data-page="calc">計算機</button>
   </div>
 </header>
 
@@ -129,6 +208,37 @@ h1{margin:0 0 8px;text-align:center;font-size:16px;color:#9db5ff}
         <div id="keySettings"></div>
         <div class="key-actions"><button id="resetKeys" class="mode-btn" style="flex:none">恢復預設鍵位</button></div>
       </div>
+    </div>
+  </section>
+  <section id="page-calc" class="page">
+    <div class="calculator">
+      <div class="calc-screen">
+        <div id="calcExpression" class="calc-expression"></div>
+        <div id="calcDisplay" class="calc-display">0</div>
+      </div>
+      <div id="calcKeys" class="calc-grid">
+        <button class="calc-key clear" data-calc="clear">AC</button>
+        <button class="calc-key" data-calc="sign">±</button>
+        <button class="calc-key" data-calc="percent">%</button>
+        <button class="calc-key operator" data-calc="operator" data-value="/">÷</button>
+        <button class="calc-key" data-calc="digit" data-value="7">7</button>
+        <button class="calc-key" data-calc="digit" data-value="8">8</button>
+        <button class="calc-key" data-calc="digit" data-value="9">9</button>
+        <button class="calc-key operator" data-calc="operator" data-value="*">×</button>
+        <button class="calc-key" data-calc="digit" data-value="4">4</button>
+        <button class="calc-key" data-calc="digit" data-value="5">5</button>
+        <button class="calc-key" data-calc="digit" data-value="6">6</button>
+        <button class="calc-key operator" data-calc="operator" data-value="-">−</button>
+        <button class="calc-key" data-calc="digit" data-value="1">1</button>
+        <button class="calc-key" data-calc="digit" data-value="2">2</button>
+        <button class="calc-key" data-calc="digit" data-value="3">3</button>
+        <button class="calc-key operator" data-calc="operator" data-value="+">＋</button>
+        <button class="calc-key clear" data-calc="backspace">⌫</button>
+        <button class="calc-key" data-calc="digit" data-value="0">0</button>
+        <button class="calc-key" data-calc="decimal">.</button>
+        <button class="calc-key equals" data-calc="equals">＝</button>
+      </div>
+      <div class="calc-note">支援滑鼠、手機觸控、主鍵盤及數字鍵盤；計算結果不會加入任何清單或總計。</div>
     </div>
   </section>
 </main>
@@ -168,15 +278,17 @@ const defaults={
   page:'old',
   list:[],
   nextId:1,
+  fontScale:1,
+  theme:'dark',
   shortcutVersion:2,
   shortcuts:DEFAULT_SHORTCUTS,
   old:{
     mode:'pair',focus:'qty',pair:{count:5,maxStar:4,buffer:'',prices:{}},
     pillar:{columns:4,maxValue:10,maxStar:4,values:[1,1,1,1],active:0,buffer:'',prices:{},autoAdvance:true},
-    car:{columns:4,maxValue:10,values:[1,1,1,1],active:0,buffer:'',price:'',packPrice:'',autoAdvance:true}
+    car:{doubleCount:5,buffer:'',price:'',doublePrice:''}
   },
   fresh:{
-    mode:'pair',focus:'qty',pending:'',pair:null,columns:[],maxStar:4,prices:{2:'',3:'',4:''},carPrice:'',packPrice:''
+    mode:'pair',focus:'qty',pending:'',pair:null,columns:[],doubleCount:null,maxStar:4,prices:{2:'',3:'',4:''},carPrice:'',doublePrice:''
   }
 };
 
@@ -184,6 +296,7 @@ let state=loadState();
 let layout=loadJson(LAYOUT_KEY,{});
 let statusTimer=0;
 let keyCapture=null;
+let calculator={display:'0',stored:null,operator:null,waiting:false,expression:''};
 
 function clone(value){return JSON.parse(JSON.stringify(value));}
 function loadJson(key,fallback){try{return JSON.parse(localStorage.getItem(key)||'null')||fallback}catch{return fallback}}
@@ -210,27 +323,30 @@ function starsForPillar(values,maxStar){
   for(let r=2;r<=Math.min(maxStar,valid.length,9);r++)out[r]=combinations(valid,r);
   return out;
 }
-function carsFor(values){
-  const valid=values.filter(v=>v>0);
-  return valid.length<2?0:valid.reduce((total,value)=>total*value,1);
+function doublesFor(count){
+  const n=clamp(count,0,39,0);
+  return Math.round(n*(39-n)*(38-n)/2);
 }
 function amountHundred(count,price){const p=parseFloat(price);return Number.isFinite(p)?count*p:null;}
 function amountYuan(count,price){const h=amountHundred(count,price);return h===null?null:h*100;}
 function fmt(value){return Number(value||0).toLocaleString('en-US',{maximumFractionDigits:8});}
-function metricName(key){return key==='car'?'車':key==='pack'?'包':NAMES[key]}
-function metricColor(key){return key==='car'?'var(--purple)':key==='pack'?'var(--green)':COLORS[key]}
-function metricUnit(key){return key==='car'?'車':key==='pack'?'包':'柱'}
+function metricName(key){return key==='car'?'車':key==='double'?'化雙':NAMES[key]}
+function metricColor(key){return key==='car'?'var(--purple)':key==='double'?'var(--green)':COLORS[key]}
+function metricUnit(key){return key==='car'?'注':key==='double'?'注':'柱'}
 function metricSort(a,b){
-  const rank=key=>key==='car'?100:key==='pack'?101:Number(key);
+  const rank=key=>key==='car'?100:key==='double'?101:Number(key);
   return rank(a)-rank(b);
 }
 function safeItem(item,index){
+  const stars=item?.stars&&typeof item.stars==='object'?{...item.stars}:{};
+  const starPrices=item?.starPrices&&typeof item.starPrices==='object'?{...item.starPrices}:{};
+  if(stars.pack!==undefined&&stars.double===undefined){stars.double=stars.pack;delete stars.pack}
+  if(starPrices.pack!==undefined&&starPrices.double===undefined){starPrices.double=starPrices.pack;delete starPrices.pack}
   return {
     id:Number.isFinite(+item?.id)?+item.id:index+1,
     type:['pi','car'].includes(item?.type)?item.type:'lp',
     desc:String(item?.desc||'舊資料'),
-    stars:item?.stars&&typeof item.stars==='object'?item.stars:{},
-    starPrices:item?.starPrices&&typeof item.starPrices==='object'?item.starPrices:{}
+    stars,starPrices
   };
 }
 
@@ -266,6 +382,8 @@ function mergeState(saved){
   Object.assign(out,saved);
   out.old={...defaults.old,...saved.old,pair:{...defaults.old.pair,...saved.old?.pair},pillar:{...defaults.old.pillar,...saved.old?.pillar},car:{...defaults.old.car,...saved.old?.car}};
   out.fresh={...defaults.fresh,...saved.fresh,prices:{...defaults.fresh.prices,...saved.fresh?.prices}};
+  if(!out.old.car.doublePrice&&saved.old?.car?.packPrice)out.old.car.doublePrice=saved.old.car.packPrice;
+  if(!out.fresh.doublePrice&&saved.fresh?.packPrice)out.fresh.doublePrice=saved.fresh.packPrice;
   out.shortcutVersion=2;
   out.shortcuts=clone(DEFAULT_SHORTCUTS);
   if(saved.shortcutVersion>=1&&saved.shortcuts&&typeof saved.shortcuts==='object'){
@@ -279,6 +397,94 @@ function mergeState(saved){
 }
 function save(){localStorage.setItem(STATE_KEY,JSON.stringify(state));}
 function saveLayout(){localStorage.setItem(LAYOUT_KEY,JSON.stringify(layout));}
+function applyFontScale(){
+  state.fontScale=Math.max(.8,Math.min(1.6,Number(state.fontScale)||1));
+  document.documentElement.style.setProperty('--font-scale',state.fontScale);
+  document.getElementById('fontValue').textContent=Math.round(state.fontScale*100)+'%';
+}
+function changeFontScale(step){
+  state.fontScale=Math.round((state.fontScale+step)*10)/10;
+  applyFontScale();save();
+  render();
+  showStatus('字體大小 '+Math.round(state.fontScale*100)+'%');
+}
+function applyTheme(){
+  state.theme=state.theme==='light'?'light':'dark';
+  document.documentElement.dataset.theme=state.theme;
+  document.getElementById('themeToggle').textContent=state.theme==='dark'?'淺色':'深色';
+  document.getElementById('themeToggle').title=state.theme==='dark'?'切換到淺色模式':'切換到深色模式';
+}
+function toggleTheme(){
+  state.theme=state.theme==='dark'?'light':'dark';
+  applyTheme();save();showStatus(state.theme==='dark'?'已切換深色模式':'已切換淺色模式');
+}
+function panelRect(el,left=el.offsetLeft,top=el.offsetTop,width=el.offsetWidth,height=el.offsetHeight){
+  return{left,top,right:left+width,bottom:top+height,width,height};
+}
+function overlaps(a,b,gap=10){
+  return a.left<b.right+gap&&a.right+gap>b.left&&a.top<b.bottom+gap&&a.bottom+gap>b.top;
+}
+function siblingRects(el){
+  return [...el.parentElement.querySelectorAll('.panel')].filter(x=>x!==el).map(panelRect);
+}
+function resolveDrag(el,left,top){
+  const parent=el.parentElement,width=el.offsetWidth,height=el.offsetHeight;
+  left=Math.max(0,Math.min(left,parent.clientWidth-width));top=Math.max(0,top);
+  const others=siblingRects(el);
+  for(const other of others){
+    let candidate=panelRect(el,left,top,width,height);
+    if(!overlaps(candidate,other))continue;
+    const options=[
+      {left:other.left-width-10,top},
+      {left:other.right+10,top},
+      {left,top:other.top-height-10},
+      {left,top:other.bottom+10}
+    ].filter(p=>p.left>=0&&p.left+width<=parent.clientWidth&&p.top>=0);
+    if(options.length){
+      const best=options.sort((a,b)=>Math.hypot(a.left-left,a.top-top)-Math.hypot(b.left-left,b.top-top))[0];
+      left=best.left;top=best.top;
+    }else top=other.bottom+10;
+  }
+  return{left,top};
+}
+function resolveResize(el,width,height){
+  const left=el.offsetLeft,top=el.offsetTop,parent=el.parentElement;
+  width=Math.max(280,Math.min(width,parent.clientWidth-left));height=Math.max(140,height);
+  siblingRects(el).forEach(other=>{
+    if(!overlaps(panelRect(el,left,top,width,height),other))return;
+    if(other.left>=left+280)width=Math.min(width,other.left-left-10);
+    if(other.top>=top+140)height=Math.min(height,other.top-top-10);
+  });
+  return{width:Math.max(280,width),height:Math.max(140,height)};
+}
+function arrangeWorkspace(workspace){
+  if(!workspace)return;
+  const panels=[...workspace.querySelectorAll('.panel')];
+  panels.forEach((el,index)=>{
+    for(let i=0;i<index;i++){
+      const other=panels[i];
+      if(overlaps(panelRect(el),panelRect(other))){
+        el.style.top=other.offsetTop+other.offsetHeight+10+'px';
+      }
+    }
+    layout[el.id]={...(layout[el.id]||{}),left:el.style.left,top:el.style.top,width:el.style.width,height:el.classList.contains('collapsed')?'':el.style.height};
+  });
+  workspace.style.minHeight=Math.max(1050,...panels.map(x=>x.offsetTop+x.offsetHeight+40))+'px';
+  saveLayout();
+}
+function arrangeAllWorkspaces(){requestAnimationFrame(()=>document.querySelectorAll('.workspace').forEach(arrangeWorkspace))}
+function ensurePanelFits(panelEl){
+  if(!panelEl||panelEl.classList.contains('collapsed'))return;
+  requestAnimationFrame(()=>{
+    const body=panelEl.querySelector('.panel-body');
+    const required=36+body.scrollHeight;
+    if(panelEl.offsetHeight<required){
+      panelEl.style.height=required+'px';
+      layout[panelEl.id]={...(layout[panelEl.id]||{}),height:panelEl.style.height};
+      arrangeWorkspace(panelEl.parentElement);
+    }
+  });
+}
 
 function panel(id,title,body,{left=10,top=10,width=520,resizable=true,autoHeight=false}={}){
   const saved=layout[id]||{};
@@ -311,17 +517,17 @@ function bindPanel(el,{resizable,autoHeight}){
   const move=e=>{
     if(!action)return;
     if(action==='drag'){
-      el.style.left=Math.max(0,Math.min(start.left+e.clientX-sx,el.parentElement.clientWidth-el.offsetWidth))+'px';
-      el.style.top=Math.max(0,start.top+e.clientY-sy)+'px';
+      const next=resolveDrag(el,start.left+e.clientX-sx,start.top+e.clientY-sy);
+      el.style.left=next.left+'px';el.style.top=next.top+'px';
     }else{
-      el.style.width=Math.max(280,Math.min(start.width+e.clientX-sx,el.parentElement.clientWidth-start.left))+'px';
-      el.style.height=Math.max(140,start.height+e.clientY-sy)+'px';
+      const next=resolveResize(el,start.width+e.clientX-sx,start.height+e.clientY-sy);
+      el.style.width=next.width+'px';el.style.height=next.height+'px';
     }
   };
   const end=()=>{
     if(!action)return;action='';
     layout[id]={...(layout[id]||{}),left:el.style.left,top:el.style.top,width:el.style.width,height:autoHeight?'':el.style.height,collapsed:el.classList.contains('collapsed')};
-    saveLayout();
+    arrangeWorkspace(el.parentElement);
   };
   head.addEventListener('pointerdown',e=>{if(e.target===collapse)return;begin(e,'drag')});
   head.addEventListener('pointermove',move);head.addEventListener('pointerup',end);head.addEventListener('pointercancel',end);
@@ -332,7 +538,7 @@ function bindPanel(el,{resizable,autoHeight}){
   }
   collapse.addEventListener('click',()=>{
     el.classList.toggle('collapsed');collapse.textContent=el.classList.contains('collapsed')?'⊕':'⊖';
-    layout[id]={...(layout[id]||{}),collapsed:el.classList.contains('collapsed')};saveLayout();
+    layout[id]={...(layout[id]||{}),collapsed:el.classList.contains('collapsed')};saveLayout();arrangeWorkspace(el.parentElement);
   });
 }
 
@@ -376,7 +582,7 @@ function priceEditor(prices,stars,prefix,disableZero=false){
 function carPriceEditor(label,color,getPrice,setPrice,prefix,disabled=false){
   const box=document.createElement('div'),row=document.createElement('div');
   row.className='price-row'+(disabled?' disabled':'');
-  row.innerHTML=`<label style="color:${color}">${label}</label><input id="${prefix}" class="price" inputmode="decimal" value="${getPrice()||''}" placeholder="${disabled?'至少需要2欄':`輸入${label}價格`}" ${disabled?'disabled':''}>`;
+  row.innerHTML=`<label style="color:${color}">${label}</label><input id="${prefix}" class="price" inputmode="decimal" value="${getPrice()||''}" placeholder="${disabled?'此選號數無化雙注數':`輸入${label}價格`}" ${disabled?'disabled':''}>`;
   const input=row.querySelector('input');
   const update=()=>{input.value=cleanNumber(input.value);setPrice(input.value);save()};
   input.oninput=update;
@@ -404,21 +610,22 @@ function renderOld(){
   const total=document.createElement('div');total.id='oldTotalBody';total.appendChild(buildTotalTable());
   ws.appendChild(panel('oldTotal','總計',total,{left:10,top:650,width:540,resizable:false,autoHeight:true}));
   fitTotals();
+  ensurePanelFits(document.getElementById('oldInput'));
 }
 function buildOldBody(){
   const body=document.createElement('div');
   const modes=document.createElement('div');modes.className='mode-row';
   modes.innerHTML=`<button class="mode-btn ${state.old.mode==='pair'?'active':''}">連碰</button><button class="mode-btn ${state.old.mode==='pillar'?'active':''}">立柱</button><button class="mode-btn ${state.old.mode==='car'?'active':''}">車</button>`;
   modes.children[0].onclick=()=>{state.old.mode='pair';state.old.focus='qty';state.old.pair.buffer='';save();refreshOldInput()};
-  const selectColumns=mode=>{
-    state.old.mode=mode;
+  const selectPillar=()=>{
+    state.old.mode='pillar';
     state.old.focus='qty';
-    state.old[mode].active=0;
-    state.old[mode].buffer='';
+    state.old.pillar.active=0;
+    state.old.pillar.buffer='';
     save();refreshOldInput();focusCurrentQuantity();
   };
-  modes.children[1].onclick=()=>selectColumns('pillar');
-  modes.children[2].onclick=()=>selectColumns('car');
+  modes.children[1].onclick=selectPillar;
+  modes.children[2].onclick=()=>{state.old.mode='car';state.old.focus='qty';state.old.car.buffer='';save();refreshOldInput();focusCurrentQuantity()};
   body.appendChild(modes);
   if(state.old.mode==='pair')body.appendChild(renderOldPair());
   else if(state.old.mode==='pillar')body.appendChild(renderOldPillar());
@@ -429,6 +636,7 @@ function refreshOldInput(){
   const panelEl=document.getElementById('oldInput');
   if(!panelEl){renderOld();return}
   const body=panelEl.querySelector('.panel-body');body.innerHTML='';body.appendChild(buildOldBody());
+  ensurePanelFits(panelEl);
 }
 function renderOldPair(){
   const p=state.old.pair,wrap=document.createElement('div');
@@ -460,21 +668,17 @@ function renderOldPillar(){
   return wrap;
 }
 function renderOldCar(){
-  const p=state.old.car,wrap=document.createElement('div');
-  const controls=document.createElement('div');controls.className='control-row section';
-  controls.appendChild(directControl('欄',p.columns,2,10,v=>{p.columns=v;p.values=p.values.slice(0,v);while(p.values.length<v)p.values.push(1);p.active=Math.min(p.active,v-1);save();renderOld()}));
-  controls.appendChild(directControl('上限',p.maxValue,1,99,v=>{p.maxValue=v;p.values=p.values.map(x=>Math.min(x,v));save();renderOld()}));
-  const auto=document.createElement('button');auto.className='mode-btn';auto.style.flex='none';auto.style.padding='7px 10px';auto.textContent='自動跳 '+(p.autoAdvance?'開':'關');
-  auto.onclick=()=>{p.autoAdvance=!p.autoAdvance;save();refreshOldInput();focusCurrentQuantity()};
-  controls.appendChild(auto);wrap.appendChild(controls);
-  const grid=document.createElement('div');grid.className='pillar-grid';
-  p.values.forEach((value,i)=>{const b=document.createElement('button');b.className='pillar'+(i===p.active&&state.old.focus==='qty'?' active':'');b.innerHTML=`<small>欄${i+1}</small><br>${value}`;b.onclick=()=>{p.active=i;p.buffer='';state.old.focus='qty';refreshOldInput()};grid.appendChild(b)});wrap.appendChild(grid);
-  const count=carsFor(p.values);
-  const combo=document.createElement('div');combo.className='preview';combo.textContent='組合 '+p.values.join('×');wrap.appendChild(combo);
-  wrap.appendChild(summary(count?{car:count}: {},'車'));
-  const section=document.createElement('div');section.className='section';section.innerHTML='<div class="section-title">車／包價格（百元）</div>';
-  section.appendChild(carPriceEditor('車','var(--purple)',()=>p.price,value=>p.price=value,'old-car-price',!count));
-  section.appendChild(carPriceEditor('包','var(--green)',()=>p.packPrice,value=>p.packPrice=value,'old-pack-price',!count));wrap.appendChild(section);
+  const p=state.old.car,wrap=document.createElement('div');wrap.className='car-layout';
+  const cards=document.createElement('div');cards.className='calc-cards';
+  cards.innerHTML=`<div class="calc-card"><div class="calc-card-title" style="color:var(--purple)">車</div><div class="calc-card-value">固定 38 注</div><div class="calc-card-note">鎖定1個號碼，與其餘38個號碼配對。</div></div>
+    <div class="calc-card"><div class="calc-card-title" style="color:var(--green)">化雙</div><div class="calc-card-value">${fmt(doublesFor(p.doubleCount))} 注</div><div class="calc-card-note">選${p.doubleCount||0}個號碼：${p.doubleCount||0} × ${Math.max(0,39-(p.doubleCount||0))} × ${Math.max(0,38-(p.doubleCount||0))} ÷ 2</div></div>`;
+  wrap.appendChild(cards);
+  const label=document.createElement('div');label.className='section-title';label.textContent='化雙選號數（1～39）';wrap.appendChild(label);
+  const display=document.createElement('div');display.tabIndex=0;display.className='number-display'+(state.old.focus==='qty'?' focused':'');display.textContent=p.buffer||p.doubleCount||'--';
+  display.onclick=()=>{state.old.focus='qty';p.buffer='';refreshOldInput();document.querySelector('#oldInput .number-display')?.focus()};wrap.appendChild(display);
+  const section=document.createElement('div');section.className='section';section.innerHTML='<div class="section-title">車／化雙價格（百元）</div>';
+  section.appendChild(carPriceEditor('車','var(--purple)',()=>p.price,value=>p.price=value,'old-car-price',false));
+  section.appendChild(carPriceEditor('化雙','var(--green)',()=>p.doublePrice,value=>p.doublePrice=value,'old-double-price',doublesFor(p.doubleCount)===0));wrap.appendChild(section);
   wrap.appendChild(actionRow('加入清單',()=>submit('old-car'),()=>clearInput('old-car')));
   return wrap;
 }
@@ -486,9 +690,11 @@ function renderNew(){
   const total=document.createElement('div');total.id='newTotalBody';total.appendChild(buildTotalTable());
   ws.appendChild(panel('newTotal','新版組數總計',total,{left:10,top:690,width:620,resizable:false,autoHeight:true}));
   fitTotals();
+  ensurePanelFits(document.getElementById('newInput'));
 }
 function buildNewBody(){
   const body=document.createElement('div');
+  if(state.fresh.mode==='car')body.className='car-layout';
   const modes=document.createElement('div');modes.className='mode-row';
   modes.innerHTML=`<button class="mode-btn ${state.fresh.mode==='pair'?'active':''}">連碰</button><button class="mode-btn ${state.fresh.mode==='pillar'?'active':''}">立柱</button><button class="mode-btn ${state.fresh.mode==='car'?'active':''}">車</button>`;
   modes.children[0].onclick=()=>resetFreshMode('pair');
@@ -499,6 +705,12 @@ function buildNewBody(){
     const controls=document.createElement('div');controls.className='control-row section';
     controls.appendChild(directControl('顯示至',state.fresh.maxStar,2,9,v=>{state.fresh.maxStar=v;save();refreshNewInput()}));
     body.appendChild(controls);
+  }else{
+    const cards=document.createElement('div');cards.className='calc-cards';
+    cards.innerHTML=`<div class="calc-card"><div class="calc-card-title" style="color:var(--purple)">車</div><div class="calc-card-value">固定 38 注</div><div class="calc-card-note">鎖定1個號碼，與其餘38個號碼配對。</div></div>
+      <div class="calc-card"><div class="calc-card-title" style="color:var(--green)">化雙</div><div class="calc-card-value">${fmt(freshDoubleBets())} 注</div><div class="calc-card-note">選${freshDoubleCount()}個號碼：${freshDoubleCount()} × ${Math.max(0,39-freshDoubleCount())} × ${Math.max(0,38-freshDoubleCount())} ÷ 2</div></div>`;
+    body.appendChild(cards);
+    const label=document.createElement('div');label.className='section-title';label.textContent='化雙選號數（1～39）';body.appendChild(label);
   }
   const display=document.createElement('div');display.id='freshDisplay';display.tabIndex=0;display.className='number-display'+(state.fresh.focus==='qty'?' focused':'');display.textContent=freshDisplay();display.onclick=()=>{state.fresh.focus='qty';save();refreshNewInput();document.getElementById('freshDisplay')?.focus()};body.appendChild(display);
   fitDisplay(display,display.textContent);
@@ -508,9 +720,9 @@ function buildNewBody(){
   const stars=freshPriceStars();
   const priceSection=document.createElement('div');priceSection.className='section';
   if(state.fresh.mode==='car'){
-    const count=freshCarCount();priceSection.innerHTML='<div class="section-title">車／包價格（百元）</div>';
-    priceSection.appendChild(carPriceEditor('車','var(--purple)',()=>state.fresh.carPrice,value=>state.fresh.carPrice=value,'fresh-car-price',!count));
-    priceSection.appendChild(carPriceEditor('包','var(--green)',()=>state.fresh.packPrice,value=>state.fresh.packPrice=value,'fresh-pack-price',!count));
+    priceSection.innerHTML='<div class="section-title">車／化雙價格（百元）</div>';
+    priceSection.appendChild(carPriceEditor('車','var(--purple)',()=>state.fresh.carPrice,value=>state.fresh.carPrice=value,'fresh-car-price',false));
+    priceSection.appendChild(carPriceEditor('化雙','var(--green)',()=>state.fresh.doublePrice,value=>state.fresh.doublePrice=value,'fresh-double-price',freshDoubleBets()===0));
   }else{
     priceSection.innerHTML='<div class="section-title">各星價格（百元）</div>';
     priceSection.appendChild(priceEditor(state.fresh.prices,stars,'fresh-price',true));
@@ -523,23 +735,23 @@ function refreshNewInput(){
   const panelEl=document.getElementById('newInput');
   if(!panelEl){renderNew();return}
   const body=panelEl.querySelector('.panel-body');body.innerHTML='';body.appendChild(buildNewBody());
+  ensurePanelFits(panelEl);
 }
-function resetFreshMode(mode){state.fresh.mode=mode;state.fresh.pending='';state.fresh.pair=null;state.fresh.columns=[];state.fresh.focus='qty';save();refreshNewInput()}
+function resetFreshMode(mode){state.fresh.mode=mode;state.fresh.pending='';state.fresh.pair=null;state.fresh.columns=[];state.fresh.doubleCount=null;state.fresh.focus='qty';save();refreshNewInput()}
 function freshDisplay(){
   const f=state.fresh;
   if(f.mode==='pair')return f.pending||f.pair||'--';
+  if(f.mode==='car')return f.pending||f.doubleCount||'--';
   const parts=f.columns.map(String);if(f.pending)parts.push(f.pending);return parts.length?parts.join('×'):'--';
 }
-function fitDisplay(el,text){const n=text.length;el.style.fontSize=(n>65?19:n>45?23:n>30?28:n>20?34:n>12?42:52)+'px'}
+function fitDisplay(el,text){const n=text.length,base=n>65?19:n>45?23:n>30?28:n>20?34:n>12?42:52;el.style.fontSize=base*state.fontScale+'px'}
 function freshStars(){
   if(state.fresh.mode==='pair')return starsForPair(state.fresh.pair||+state.fresh.pending||0,state.fresh.maxStar);
   if(state.fresh.mode==='car')return {};
   const values=state.fresh.columns.slice();if(state.fresh.pending)values.push(+state.fresh.pending);return starsForPillar(values,state.fresh.maxStar);
 }
-function freshCarCount(){
-  const values=state.fresh.columns.slice();if(state.fresh.pending)values.push(+state.fresh.pending);
-  return carsFor(values);
-}
+function freshDoubleCount(){return clamp(state.fresh.doubleCount||+state.fresh.pending||0,0,39,0)}
+function freshDoubleBets(){return doublesFor(freshDoubleCount())}
 function freshPriceStars(){
   const calculated=freshStars(),out={};
   for(let r=2;r<=state.fresh.maxStar;r++)out[r]=calculated[r]||0;
@@ -550,7 +762,7 @@ function renderCalculated(){
   if(note)note.innerHTML=compactStars(stars);
 }
 function compactStars(stars){
-  if(state.fresh.mode==='car')return`<span style="color:var(--purple)">車 <b>${freshCarCount()}</b>車</span>`;
+  if(state.fresh.mode==='car')return`<span style="color:var(--purple)">車 <b>固定38注</b></span>　<span style="color:var(--green)">化雙 <b>${fmt(freshDoubleBets())}注</b>（選${freshDoubleCount()}個號碼）</span>`;
   return Object.keys(stars).map(Number).map(r=>`<span style="color:${COLORS[r]}">${NAMES[r]} <b>${stars[r]||0}</b>柱</span>`).join('　');
 }
 function summary(stars,unit){
@@ -576,44 +788,45 @@ function submit(kind){
     item={type:'pi',desc:`立柱 ${p.values.join('×')}`,stars,starPrices:{...p.prices}};
     p.values=Array(p.columns).fill(0);p.active=0;p.buffer='';p.prices={};state.old.focus='qty';
   }else if(kind==='old-car'){
-    const p=state.old.car,count=carsFor(p.values);
-    if(!count)return alert('至少需要2欄非零');
-    item={type:'car',desc:`車 ${p.values.join('×')}`,stars:{car:count,pack:count},starPrices:{car:p.price,pack:p.packPrice}};
-    p.values=Array(p.columns).fill(0);p.active=0;p.buffer='';p.price='';p.packPrice='';state.old.focus='qty';
+    const p=state.old.car,doubleBets=doublesFor(p.doubleCount);
+    item={type:'car',desc:`車固定38注／化雙選${p.doubleCount||0}個號碼`,stars:{car:38,...(doubleBets?{double:doubleBets}:{})},starPrices:{car:p.price,...(doubleBets?{double:p.doublePrice}:{})}};
+    p.doubleCount=0;p.buffer='';p.price='';p.doublePrice='';state.old.focus='qty';
   }else{
     commitFreshPending();
     if(state.fresh.mode==='pair'&&!state.fresh.pair)return alert('請先輸入連碰組數');
     if(state.fresh.mode==='pillar'&&state.fresh.columns.length<2)return alert('至少需要2柱非零');
-    if(state.fresh.mode==='car'&&state.fresh.columns.length<2)return alert('至少需要2欄非零');
     if(state.fresh.mode==='car'){
-      const count=carsFor(state.fresh.columns);
-      item={type:'car',desc:`車 ${state.fresh.columns.join('×')}`,stars:{car:count,pack:count},starPrices:{car:state.fresh.carPrice,pack:state.fresh.packPrice}};
+      const doubleBets=doublesFor(state.fresh.doubleCount);
+      item={type:'car',desc:`車固定38注／化雙選${state.fresh.doubleCount||0}個號碼`,stars:{car:38,...(doubleBets?{double:doubleBets}:{})},starPrices:{car:state.fresh.carPrice,...(doubleBets?{double:state.fresh.doublePrice}:{})}};
     }else{
       const stars=freshStars();
       item={type:state.fresh.mode==='pair'?'lp':'pi',desc:state.fresh.mode==='pair'?`連碰 ${state.fresh.pair}個`:`立柱 ${state.fresh.columns.join('×')}`,stars,starPrices:{...state.fresh.prices}};
     }
-    state.fresh.pending='';state.fresh.pair=null;state.fresh.columns=[];state.fresh.prices={};state.fresh.carPrice='';state.fresh.packPrice='';state.fresh.focus='qty';
+    state.fresh.pending='';state.fresh.pair=null;state.fresh.columns=[];state.fresh.doubleCount=null;state.fresh.prices={};state.fresh.carPrice='';state.fresh.doublePrice='';state.fresh.focus='qty';
   }
   item.id=state.nextId++;state.list.push(item);save();render();focusCurrentQuantity();showStatus(`已加入清單，目前 ${state.list.length} 筆`);
 }
 function clearInput(kind){
   if(kind==='old-pair'){Object.assign(state.old.pair,{count:0,buffer:'',prices:{}})}
   else if(kind==='old-pillar'){Object.assign(state.old.pillar,{values:Array(state.old.pillar.columns).fill(0),active:0,buffer:'',prices:{}})}
-  else if(kind==='old-car'){Object.assign(state.old.car,{values:Array(state.old.car.columns).fill(0),active:0,buffer:'',price:'',packPrice:''})}
-  else{Object.assign(state.fresh,{pending:'',pair:null,columns:[],prices:{},carPrice:'',packPrice:'',focus:'qty'})}
+  else if(kind==='old-car'){Object.assign(state.old.car,{doubleCount:0,buffer:'',price:'',doublePrice:''})}
+  else{Object.assign(state.fresh,{pending:'',pair:null,columns:[],doubleCount:null,prices:{},carPrice:'',doublePrice:'',focus:'qty'})}
   if(kind!=='new')state.old.focus='qty';
   save();render();focusCurrentQuantity();
 }
 function commitFreshPending(){
   const n=+state.fresh.pending;if(!n)return false;
-  if(state.fresh.mode==='pair')state.fresh.pair=n;else state.fresh.columns.push(n);
+  if(state.fresh.mode==='pair')state.fresh.pair=n;
+  else if(state.fresh.mode==='car')state.fresh.doubleCount=clamp(n,0,39,0);
+  else state.fresh.columns.push(n);
   state.fresh.pending='';return true;
 }
 function backspaceFresh(){
   const f=state.fresh;
   if(f.pending)f.pending=f.pending.slice(0,-1);
   else if(f.mode==='pair'&&f.pair)f.pair=+String(f.pair).slice(0,-1)||null;
-  else if(f.mode==='pillar'||f.mode==='car')f.columns.pop();
+  else if(f.mode==='pillar')f.columns.pop();
+  else if(f.mode==='car'&&f.doubleCount)f.doubleCount=+String(f.doubleCount).slice(0,-1)||null;
   save();refreshNewInput();
 }
 function backspaceOld(){
@@ -623,8 +836,13 @@ function backspaceOld(){
     const source=p.buffer||String(p.count||'');
     p.buffer=source.slice(0,-1);
     p.count=parseInt(p.buffer,10)||0;
+  }else if(state.old.mode==='car'){
+    const p=state.old.car;
+    const source=p.buffer||String(p.doubleCount||'');
+    p.buffer=source.slice(0,-1);
+    p.doubleCount=parseInt(p.buffer,10)||0;
   }else{
-    const p=state.old[state.old.mode];
+    const p=state.old.pillar;
     const source=p.buffer||String(p.values[p.active]||'');
     p.buffer=source.slice(0,-1);
     p.values[p.active]=parseInt(p.buffer,10)||0;
@@ -634,7 +852,8 @@ function backspaceOld(){
 function focusCurrentQuantity(){
   requestAnimationFrame(()=>{
     if(state.page==='new')document.getElementById('freshDisplay')?.focus();
-    else if(state.page==='old'&&(state.old.mode==='pillar'||state.old.mode==='car'))document.querySelector('#oldInput .pillar.active')?.focus();
+    else if(state.page==='old'&&state.old.mode==='pillar')document.querySelector('#oldInput .pillar.active')?.focus();
+    else if(state.page==='old'&&state.old.mode==='car')document.querySelector('#oldInput .number-display')?.focus();
     else if(state.page==='old')document.querySelector('#oldInput .number-display')?.focus();
   });
 }
@@ -678,13 +897,107 @@ function renderList(){
   state.list.forEach(item=>{
     const row=document.createElement('div');row.className='list-item';
     const typeName=item.type==='pi'?'立柱':item.type==='car'?'車':'連碰';
-    row.innerHTML=`<div class="list-main"><span class="tag ${item.type}">${typeName}</span><div class="desc">${item.desc}</div><div class="details">${Object.entries(item.stars||{}).map(([r,n])=>{const price=item.starPrices?.[r],amount=amountYuan(n,price);return`<span style="color:${metricColor(r)}">${metricName(r)}</span> ${n}${r==='car'?'車':r==='pack'?'包':'注'}${amount===null?'':` × ${price} = ${fmt(amount)}元`}`}).join('<br>')||'缺少明細'}</div></div><button class="delete">×</button>`;
+    row.innerHTML=`<div class="list-main"><span class="tag ${item.type}">${typeName}</span><div class="desc">${item.desc}</div><div class="details">${Object.entries(item.stars||{}).map(([r,n])=>{const price=item.starPrices?.[r],amount=amountYuan(n,price);return`<span style="color:${metricColor(r)}">${metricName(r)}</span> ${n}注${amount===null?'':` × ${price} = ${fmt(amount)}元`}`}).join('<br>')||'缺少明細'}</div></div><button class="delete">×</button>`;
     row.querySelector('button').onclick=()=>deleteItem(item.id);details.appendChild(row);
   });
 }
 function deleteItem(id){state.list=state.list.filter(x=>x.id!==id);save();render()}
 function clearAll(){if(!state.list.length)return;if(confirm('確定清除全部清單？')){state.list=[];save();render()}}
 function showStatus(text){const el=document.getElementById('status');el.textContent=text;el.style.display='block';clearTimeout(statusTimer);statusTimer=setTimeout(()=>el.style.display='none',1300)}
+
+function calcFormat(value){
+  if(!Number.isFinite(value))return'錯誤';
+  const rounded=Math.round((value+Number.EPSILON)*1e10)/1e10;
+  return String(rounded).length>16?rounded.toExponential(8):String(rounded);
+}
+function calcApply(a,b,operator){
+  if(operator==='+')return a+b;
+  if(operator==='-')return a-b;
+  if(operator==='*')return a*b;
+  if(operator==='/')return b===0?NaN:a/b;
+  return b;
+}
+function renderCalculator(){
+  const display=document.getElementById('calcDisplay'),expression=document.getElementById('calcExpression');
+  display.textContent=calculator.display;
+  expression.textContent=calculator.expression||' ';
+  const length=calculator.display.length;
+  const base=length>18?20:length>14?25:length>10?31:38;
+  display.style.fontSize=base*state.fontScale+'px';
+  requestAnimationFrame(()=>{
+    display.scrollLeft=display.scrollWidth;
+    expression.scrollLeft=expression.scrollWidth;
+  });
+}
+function calcClear(){
+  calculator={display:'0',stored:null,operator:null,waiting:false,expression:''};
+  renderCalculator();
+}
+function calcDigit(digit){
+  if(calculator.display==='錯誤')calcClear();
+  if(calculator.waiting){calculator.display=digit;calculator.waiting=false}
+  else calculator.display=calculator.display==='0'?digit:(calculator.display+digit).slice(0,16);
+  renderCalculator();
+}
+function calcDecimal(){
+  if(calculator.display==='錯誤')calcClear();
+  if(calculator.waiting){calculator.display='0.';calculator.waiting=false}
+  else if(!calculator.display.includes('.'))calculator.display+='.';
+  renderCalculator();
+}
+function calcOperator(operator){
+  const current=parseFloat(calculator.display);
+  if(!Number.isFinite(current))return calcClear();
+  if(calculator.operator&&!calculator.waiting){
+    const result=calcApply(calculator.stored,current,calculator.operator);
+    calculator.display=calcFormat(result);
+    calculator.stored=result;
+  }else calculator.stored=current;
+  if(calculator.display==='錯誤')return renderCalculator();
+  calculator.operator=operator;calculator.waiting=true;
+  calculator.expression=calculator.display+' '+({'+':'＋','-':'−','*':'×','/':'÷'}[operator]);
+  renderCalculator();
+}
+function calcEquals(){
+  if(!calculator.operator)return;
+  const current=parseFloat(calculator.display),previous=calculator.stored,operator=calculator.operator;
+  const result=calcApply(previous,current,operator);
+  calculator.expression=`${calcFormat(previous)} ${{'+':'＋','-':'−','*':'×','/':'÷'}[operator]} ${calcFormat(current)} ＝`;
+  calculator.display=calcFormat(result);calculator.stored=null;calculator.operator=null;calculator.waiting=true;
+  renderCalculator();
+}
+function calcAction(action,value){
+  if(action==='digit')calcDigit(value);
+  else if(action==='decimal')calcDecimal();
+  else if(action==='operator')calcOperator(value);
+  else if(action==='equals')calcEquals();
+  else if(action==='clear')calcClear();
+  else if(action==='backspace'){
+    if(calculator.waiting||calculator.display==='錯誤')return;
+    calculator.display=calculator.display.length>1?calculator.display.slice(0,-1):'0';renderCalculator();
+  }else if(action==='sign'){
+    if(calculator.display!=='0'&&calculator.display!=='錯誤')calculator.display=calculator.display.startsWith('-')?calculator.display.slice(1):'-'+calculator.display;
+    renderCalculator();
+  }else if(action==='percent'){
+    if(calculator.display!=='錯誤')calculator.display=calcFormat(parseFloat(calculator.display)/100);
+    renderCalculator();
+  }
+}
+function handleCalculatorKey(e){
+  const code=e.code,key=e.key;
+  if(/^\d$/.test(key)){calcDigit(key);return true}
+  if(code?.startsWith('Numpad')&&/^Numpad\d$/.test(code)){calcDigit(code.slice(-1));return true}
+  if(key==='.'||key===','||code==='NumpadDecimal'){calcDecimal();return true}
+  if(key==='+'||code==='NumpadAdd'){calcOperator('+');return true}
+  if(key==='-'||code==='NumpadSubtract'){calcOperator('-');return true}
+  if(key==='*'||code==='NumpadMultiply'){calcOperator('*');return true}
+  if(key==='/'||code==='NumpadDivide'){calcOperator('/');return true}
+  if(key==='Enter'||key==='='||code==='NumpadEnter'){calcEquals();return true}
+  if(key==='Backspace'){calcAction('backspace');return true}
+  if(key==='Escape'||key==='Delete'){calcClear();return true}
+  if(key==='%'){calcAction('percent');return true}
+  return false;
+}
 
 function keySignature(e){
   const parts=[];
@@ -768,6 +1081,7 @@ function render(){
   if(state.page==='new')renderNew();
   renderList();
   renderKeySettings();
+  arrangeAllWorkspaces();
 }
 function fitTotals(){requestAnimationFrame(()=>document.querySelectorAll('#oldTotal,#newTotal').forEach(el=>{if(!el.classList.contains('collapsed'))el.style.height='auto'}))}
 
@@ -776,12 +1090,14 @@ function inputDigit(d){
     if(state.old.focus!=='qty')return false;
     if(state.old.mode==='pair'){
       const p=state.old.pair;p.buffer=(p.buffer+d).slice(-2);p.count=clamp(p.buffer,0,39,0);
+    }else if(state.old.mode==='car'){
+      const p=state.old.car;p.buffer=(p.buffer+d).slice(-2);p.doubleCount=clamp(p.buffer,0,39,0);
     }else{
       const p=state.old[state.old.mode];p.buffer=(p.buffer+d).slice(-2);p.values[p.active]=clamp(p.buffer,0,p.maxValue,0);
     }
     save();refreshOldInput();
-    if((state.old.mode==='pillar'||state.old.mode==='car')&&state.old[state.old.mode].autoAdvance){
-      const p=state.old[state.old.mode];
+    if(state.old.mode==='pillar'&&state.old.pillar.autoAdvance){
+      const p=state.old.pillar;
       const requiredDigits=p.maxValue<=9?1:2;
       if(p.buffer.length>=requiredDigits)advanceOldColumns();
       else focusCurrentQuantity();
@@ -800,7 +1116,7 @@ function advanceOldColumns(){
     document.querySelector('#oldInput .pillar.active')?.focus();
     return;
   }
-  const priceId=mode==='car'?(carsFor(p.values)?'old-car-price':''):('old-pillar-price-'+Object.keys(starsForPillar(p.values,p.maxStar))[0]);
+  const priceId='old-pillar-price-'+Object.keys(starsForPillar(p.values,p.maxStar))[0];
   if(priceId&&!priceId.endsWith('undefined')){
     state.old.focus=priceId;save();refreshOldInput();
     document.getElementById(state.old.focus)?.focus();
@@ -809,8 +1125,11 @@ function advanceOldColumns(){
 function enterAction(){
   if(state.page==='old'){
     if(state.old.focus==='qty'){
-      if(state.old.mode==='pillar'||state.old.mode==='car'){
+      if(state.old.mode==='pillar'){
         advanceOldColumns();return;
+      }
+      if(state.old.mode==='car'){
+        state.old.car.buffer='';state.old.focus='old-car-price';save();refreshOldInput();document.getElementById(state.old.focus)?.focus();return;
       }
       const first=Object.keys(starsForPair(state.old.pair.count,state.old.pair.maxStar))[0];
       if(first){
@@ -824,8 +1143,8 @@ function enterAction(){
   if(state.page==='new'){
     if(state.fresh.focus==='qty'){
       if(state.fresh.mode==='pillar'||state.fresh.mode==='car'){
-        if(commitFreshPending()){save();refreshNewInput();return}
-        const priceId=state.fresh.mode==='car'?(freshCarCount()?'fresh-car-price':''):('fresh-price-'+Object.keys(freshStars())[0]);
+        if(commitFreshPending()&&state.fresh.mode==='pillar'){save();refreshNewInput();return}
+        const priceId=state.fresh.mode==='car'?'fresh-car-price':('fresh-price-'+Object.keys(freshStars())[0]);
         if(priceId&&!priceId.endsWith('undefined')){state.fresh.focus=priceId;refreshNewInput();document.getElementById(state.fresh.focus)?.focus()}
         return;
       }
@@ -840,13 +1159,13 @@ function cyclePriceFocus(scope){
   if(isCar){
     const current=scope==='new'?state.fresh.focus:state.old.focus;
     const carId=scope==='new'?'fresh-car-price':'old-car-price';
-    const packId=scope==='new'?'fresh-pack-price':'old-pack-price';
+    const doubleId=scope==='new'?'fresh-double-price':'old-double-price';
     if(current===carId){
-      if(scope==='new')state.fresh.focus=packId;else state.old.focus=packId;
-      save();document.getElementById(packId)?.focus();return;
+      if(scope==='new')state.fresh.focus=doubleId;else state.old.focus=doubleId;
+      save();document.getElementById(doubleId)?.focus();return;
     }
     if(scope==='new'){state.fresh.focus='qty';save();refreshNewInput();document.getElementById('freshDisplay')?.focus()}
-    else{state.old.focus='qty';state.old.car.active=0;save();refreshOldInput();document.querySelector('#oldInput .pillar.active')?.focus()}
+    else{state.old.focus='qty';save();refreshOldInput();document.querySelector('#oldInput .number-display')?.focus()}
     return;
   }
   const prefix=scope==='new'?'fresh-price-':state.old.mode==='pair'?'old-pair-price-':'old-pillar-price-';
@@ -873,6 +1192,14 @@ function cyclePriceFocus(scope){
 
 document.querySelectorAll('.tab').forEach(tab=>tab.onclick=()=>switchPage(tab.dataset.page));
 document.getElementById('clearAll').onclick=clearAll;
+document.getElementById('fontDown').onclick=()=>changeFontScale(-.1);
+document.getElementById('fontUp').onclick=()=>changeFontScale(.1);
+document.getElementById('fontReset').onclick=()=>{state.fontScale=1;applyFontScale();save();render();showStatus('字體已恢復 100%')};
+document.getElementById('themeToggle').onclick=toggleTheme;
+document.getElementById('calcKeys').addEventListener('click',e=>{
+  const button=e.target.closest('button[data-calc]');
+  if(button)calcAction(button.dataset.calc,button.dataset.value);
+});
 document.getElementById('cancelKeyCapture').onclick=closeKeyCapture;
 document.getElementById('resetKeys').onclick=()=>{
   if(!confirm('確定恢復所有預設快捷鍵？'))return;
@@ -893,6 +1220,7 @@ document.addEventListener('focusin',e=>{
 });
 document.addEventListener('keydown',e=>{
   if(keyCapture){captureKey(e);return}
+  if(state.page==='calc'&&handleCalculatorKey(e)){e.preventDefault();return}
   const action=shortcutAction(e);
   if(action==='clearAll'){if(state.list.length&&confirm('確定清除全部清單？')){state.list=[];save();render()}return}
   if(action==='submit'&&!e.target.classList.contains('direct')){
@@ -924,7 +1252,7 @@ document.addEventListener('keydown',e=>{
     e.preventDefault();
     if(state.page==='old'){
       state.old.mode='car';state.old.focus='qty';
-      state.old.car.active=0;state.old.car.buffer='';
+      state.old.car.buffer='';
       save();renderOld();focusCurrentQuantity();
     }else if(state.page==='new')resetFreshMode('car');
     return;
@@ -933,8 +1261,11 @@ document.addEventListener('keydown',e=>{
   if(action==='next'){e.preventDefault();enterAction();return}
 });
 
-window.addEventListener('resize',fitTotals);
-state.page=['old','new','list','keys'].includes(state.page)?state.page:'old';
+window.addEventListener('resize',()=>{fitTotals();arrangeAllWorkspaces()});
+state.page=['old','new','list','keys','calc'].includes(state.page)?state.page:'old';
+applyFontScale();
+applyTheme();
+renderCalculator();
 switchPage(state.page);
 })();
 </script>

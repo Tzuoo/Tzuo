@@ -72,6 +72,7 @@ h1{margin:0 0 8px;text-align:center;font-size:16px;color:#9db5ff}
 .tag{display:inline-block;padding:2px 7px;border-radius:8px;font-size:10px;font-weight:800}
 .tag.lp{background:rgba(96,165,250,.16);color:var(--blue)}
 .tag.pi{background:rgba(52,211,153,.16);color:var(--green)}
+.tag.car{background:rgba(192,132,252,.16);color:var(--purple)}
 .desc{margin:3px 0;font-family:Consolas,monospace;font-size:13px}
 .details{line-height:1.8;color:var(--muted);font-size:12px}
 .list-total-row{display:flex;justify-content:space-between;padding:8px 12px;border-bottom:1px solid var(--line)}
@@ -151,13 +152,13 @@ const LEGACY_NEW_KEY='539_v27_count_only_integrated';
 const COLORS={2:'#60a5fa',3:'#34d399',4:'#fbbf24',5:'#f87171',6:'#c084fc',7:'#38bdf8',8:'#a3e635',9:'#fb923c'};
 const NAMES={2:'二星',3:'三星',4:'四星',5:'五星',6:'六星',7:'七星',8:'八星',9:'九星'};
 const SHORTCUT_LABELS={
-  modePair:'切換連碰',modePillar:'切換立柱',submit:'加入清單',
+  modePair:'切換連碰',modePillar:'切換立柱',modeCar:'切換車',submit:'加入清單',
   next:'確認／下一欄',backspace:'退一碼',clearAll:'清除全部',
   digit0:'輸入數字 0',digit1:'輸入數字 1',digit2:'輸入數字 2',digit3:'輸入數字 3',digit4:'輸入數字 4',
   digit5:'輸入數字 5',digit6:'輸入數字 6',digit7:'輸入數字 7',digit8:'輸入數字 8',digit9:'輸入數字 9'
 };
 const DEFAULT_SHORTCUTS={
-  modePair:['NumLock'],modePillar:['NumpadDivide','Slash'],submit:['NumpadAdd','Shift+Equal'],
+  modePair:['NumLock'],modePillar:['NumpadDivide','Slash'],modeCar:['NumpadMultiply','Shift+Digit8'],submit:['NumpadAdd','Shift+Equal'],
   next:['Enter','NumpadEnter','Tab'],backspace:['Backspace'],clearAll:['Escape'],
   digit0:['Digit0','Numpad0'],digit1:['Digit1','Numpad1'],digit2:['Digit2','Numpad2'],digit3:['Digit3','Numpad3'],digit4:['Digit4','Numpad4'],
   digit5:['Digit5','Numpad5'],digit6:['Digit6','Numpad6'],digit7:['Digit7','Numpad7'],digit8:['Digit8','Numpad8'],digit9:['Digit9','Numpad9']
@@ -167,14 +168,15 @@ const defaults={
   page:'old',
   list:[],
   nextId:1,
-  shortcutVersion:1,
+  shortcutVersion:2,
   shortcuts:DEFAULT_SHORTCUTS,
   old:{
     mode:'pair',focus:'qty',pair:{count:5,maxStar:4,buffer:'',prices:{}},
-    pillar:{columns:4,maxValue:10,maxStar:4,values:[1,1,1,1],active:0,buffer:'',prices:{},autoAdvance:true}
+    pillar:{columns:4,maxValue:10,maxStar:4,values:[1,1,1,1],active:0,buffer:'',prices:{},autoAdvance:true},
+    car:{columns:4,maxValue:10,values:[1,1,1,1],active:0,buffer:'',price:'',packPrice:'',autoAdvance:true}
   },
   fresh:{
-    mode:'pair',focus:'qty',pending:'',pair:null,columns:[],maxStar:4,prices:{2:'',3:'',4:''}
+    mode:'pair',focus:'qty',pending:'',pair:null,columns:[],maxStar:4,prices:{2:'',3:'',4:''},carPrice:'',packPrice:''
   }
 };
 
@@ -208,13 +210,24 @@ function starsForPillar(values,maxStar){
   for(let r=2;r<=Math.min(maxStar,valid.length,9);r++)out[r]=combinations(valid,r);
   return out;
 }
+function carsFor(values){
+  const valid=values.filter(v=>v>0);
+  return valid.length<2?0:valid.reduce((total,value)=>total*value,1);
+}
 function amountHundred(count,price){const p=parseFloat(price);return Number.isFinite(p)?count*p:null;}
 function amountYuan(count,price){const h=amountHundred(count,price);return h===null?null:h*100;}
 function fmt(value){return Number(value||0).toLocaleString('en-US',{maximumFractionDigits:8});}
+function metricName(key){return key==='car'?'車':key==='pack'?'包':NAMES[key]}
+function metricColor(key){return key==='car'?'var(--purple)':key==='pack'?'var(--green)':COLORS[key]}
+function metricUnit(key){return key==='car'?'車':key==='pack'?'包':'柱'}
+function metricSort(a,b){
+  const rank=key=>key==='car'?100:key==='pack'?101:Number(key);
+  return rank(a)-rank(b);
+}
 function safeItem(item,index){
   return {
     id:Number.isFinite(+item?.id)?+item.id:index+1,
-    type:item?.type==='pi'?'pi':'lp',
+    type:['pi','car'].includes(item?.type)?item.type:'lp',
     desc:String(item?.desc||'舊資料'),
     stars:item?.stars&&typeof item.stars==='object'?item.stars:{},
     starPrices:item?.starPrices&&typeof item.starPrices==='object'?item.starPrices:{}
@@ -251,10 +264,11 @@ function loadState(){
 function mergeState(saved){
   const out=clone(defaults);
   Object.assign(out,saved);
-  out.old={...defaults.old,...saved.old,pair:{...defaults.old.pair,...saved.old?.pair},pillar:{...defaults.old.pillar,...saved.old?.pillar}};
+  out.old={...defaults.old,...saved.old,pair:{...defaults.old.pair,...saved.old?.pair},pillar:{...defaults.old.pillar,...saved.old?.pillar},car:{...defaults.old.car,...saved.old?.car}};
   out.fresh={...defaults.fresh,...saved.fresh,prices:{...defaults.fresh.prices,...saved.fresh?.prices}};
+  out.shortcutVersion=2;
   out.shortcuts=clone(DEFAULT_SHORTCUTS);
-  if(saved.shortcutVersion===1&&saved.shortcuts&&typeof saved.shortcuts==='object'){
+  if(saved.shortcutVersion>=1&&saved.shortcuts&&typeof saved.shortcuts==='object'){
     Object.keys(DEFAULT_SHORTCUTS).forEach(action=>{
       if(Array.isArray(saved.shortcuts[action]))out.shortcuts[action]=saved.shortcuts[action].filter(x=>typeof x==='string');
     });
@@ -359,6 +373,24 @@ function priceEditor(prices,stars,prefix,disableZero=false){
   });
   return box;
 }
+function carPriceEditor(label,color,getPrice,setPrice,prefix,disabled=false){
+  const box=document.createElement('div'),row=document.createElement('div');
+  row.className='price-row'+(disabled?' disabled':'');
+  row.innerHTML=`<label style="color:${color}">${label}</label><input id="${prefix}" class="price" inputmode="decimal" value="${getPrice()||''}" placeholder="${disabled?'至少需要2欄':`輸入${label}價格`}" ${disabled?'disabled':''}>`;
+  const input=row.querySelector('input');
+  const update=()=>{input.value=cleanNumber(input.value);setPrice(input.value);save()};
+  input.oninput=update;
+  input.onkeydown=e=>{
+    if(!(e.code==='NumpadDecimal'||e.key==='Decimal'||e.key==='.'||e.key===','))return;
+    e.preventDefault();
+    const start=input.selectionStart??input.value.length,end=input.selectionEnd??start;
+    input.value=cleanNumber(input.value.slice(0,start)+'.'+input.value.slice(end));
+    const caret=Math.min(start+1,input.value.length);
+    input.setSelectionRange(caret,caret);update();
+  };
+  input.onfocus=()=>{setFocus(input.id);setTimeout(()=>input.select(),0)};
+  box.appendChild(row);return box;
+}
 function setFocus(focus){
   if(state.page==='old')state.old.focus=focus;
   else state.fresh.focus=focus;
@@ -376,18 +408,21 @@ function renderOld(){
 function buildOldBody(){
   const body=document.createElement('div');
   const modes=document.createElement('div');modes.className='mode-row';
-  modes.innerHTML=`<button class="mode-btn ${state.old.mode==='pair'?'active':''}">連碰</button><button class="mode-btn ${state.old.mode==='pillar'?'active':''}">立柱</button>`;
+  modes.innerHTML=`<button class="mode-btn ${state.old.mode==='pair'?'active':''}">連碰</button><button class="mode-btn ${state.old.mode==='pillar'?'active':''}">立柱</button><button class="mode-btn ${state.old.mode==='car'?'active':''}">車</button>`;
   modes.children[0].onclick=()=>{state.old.mode='pair';state.old.focus='qty';state.old.pair.buffer='';save();refreshOldInput()};
-  modes.children[1].onclick=()=>{
-    state.old.mode='pillar';
+  const selectColumns=mode=>{
+    state.old.mode=mode;
     state.old.focus='qty';
-    state.old.pillar.active=0;
-    state.old.pillar.buffer='';
+    state.old[mode].active=0;
+    state.old[mode].buffer='';
     save();refreshOldInput();focusCurrentQuantity();
   };
+  modes.children[1].onclick=()=>selectColumns('pillar');
+  modes.children[2].onclick=()=>selectColumns('car');
   body.appendChild(modes);
   if(state.old.mode==='pair')body.appendChild(renderOldPair());
-  else body.appendChild(renderOldPillar());
+  else if(state.old.mode==='pillar')body.appendChild(renderOldPillar());
+  else body.appendChild(renderOldCar());
   return body;
 }
 function refreshOldInput(){
@@ -424,6 +459,25 @@ function renderOldPillar(){
   wrap.appendChild(actionRow('加入清單',()=>submit('old-pillar'),()=>clearInput('old-pillar')));
   return wrap;
 }
+function renderOldCar(){
+  const p=state.old.car,wrap=document.createElement('div');
+  const controls=document.createElement('div');controls.className='control-row section';
+  controls.appendChild(directControl('欄',p.columns,2,10,v=>{p.columns=v;p.values=p.values.slice(0,v);while(p.values.length<v)p.values.push(1);p.active=Math.min(p.active,v-1);save();renderOld()}));
+  controls.appendChild(directControl('上限',p.maxValue,1,99,v=>{p.maxValue=v;p.values=p.values.map(x=>Math.min(x,v));save();renderOld()}));
+  const auto=document.createElement('button');auto.className='mode-btn';auto.style.flex='none';auto.style.padding='7px 10px';auto.textContent='自動跳 '+(p.autoAdvance?'開':'關');
+  auto.onclick=()=>{p.autoAdvance=!p.autoAdvance;save();refreshOldInput();focusCurrentQuantity()};
+  controls.appendChild(auto);wrap.appendChild(controls);
+  const grid=document.createElement('div');grid.className='pillar-grid';
+  p.values.forEach((value,i)=>{const b=document.createElement('button');b.className='pillar'+(i===p.active&&state.old.focus==='qty'?' active':'');b.innerHTML=`<small>欄${i+1}</small><br>${value}`;b.onclick=()=>{p.active=i;p.buffer='';state.old.focus='qty';refreshOldInput()};grid.appendChild(b)});wrap.appendChild(grid);
+  const count=carsFor(p.values);
+  const combo=document.createElement('div');combo.className='preview';combo.textContent='組合 '+p.values.join('×');wrap.appendChild(combo);
+  wrap.appendChild(summary(count?{car:count}: {},'車'));
+  const section=document.createElement('div');section.className='section';section.innerHTML='<div class="section-title">車／包價格（百元）</div>';
+  section.appendChild(carPriceEditor('車','var(--purple)',()=>p.price,value=>p.price=value,'old-car-price',!count));
+  section.appendChild(carPriceEditor('包','var(--green)',()=>p.packPrice,value=>p.packPrice=value,'old-pack-price',!count));wrap.appendChild(section);
+  wrap.appendChild(actionRow('加入清單',()=>submit('old-car'),()=>clearInput('old-car')));
+  return wrap;
+}
 
 function renderNew(){
   const ws=document.getElementById('newWorkspace');ws.innerHTML='';
@@ -436,20 +490,32 @@ function renderNew(){
 function buildNewBody(){
   const body=document.createElement('div');
   const modes=document.createElement('div');modes.className='mode-row';
-  modes.innerHTML=`<button class="mode-btn ${state.fresh.mode==='pair'?'active':''}">連碰</button><button class="mode-btn ${state.fresh.mode==='pillar'?'active':''}">立柱</button>`;
+  modes.innerHTML=`<button class="mode-btn ${state.fresh.mode==='pair'?'active':''}">連碰</button><button class="mode-btn ${state.fresh.mode==='pillar'?'active':''}">立柱</button><button class="mode-btn ${state.fresh.mode==='car'?'active':''}">車</button>`;
   modes.children[0].onclick=()=>resetFreshMode('pair');
   modes.children[1].onclick=()=>resetFreshMode('pillar');
+  modes.children[2].onclick=()=>resetFreshMode('car');
   body.appendChild(modes);
-  const controls=document.createElement('div');controls.className='control-row section';
-  controls.appendChild(directControl('顯示至',state.fresh.maxStar,2,9,v=>{state.fresh.maxStar=v;save();refreshNewInput()}));
-  body.appendChild(controls);
+  if(state.fresh.mode!=='car'){
+    const controls=document.createElement('div');controls.className='control-row section';
+    controls.appendChild(directControl('顯示至',state.fresh.maxStar,2,9,v=>{state.fresh.maxStar=v;save();refreshNewInput()}));
+    body.appendChild(controls);
+  }
   const display=document.createElement('div');display.id='freshDisplay';display.tabIndex=0;display.className='number-display'+(state.fresh.focus==='qty'?' focused':'');display.textContent=freshDisplay();display.onclick=()=>{state.fresh.focus='qty';save();refreshNewInput();document.getElementById('freshDisplay')?.focus()};body.appendChild(display);
   fitDisplay(display,display.textContent);
   const actions=document.createElement('div');actions.className='actions';
   actions.innerHTML='<button>退一碼</button><button class="danger">清空</button>';
   actions.children[0].onclick=()=>backspaceFresh();actions.children[1].onclick=()=>clearInput('new');body.appendChild(actions);
   const stars=freshPriceStars();
-  const priceSection=document.createElement('div');priceSection.className='section';priceSection.innerHTML='<div class="section-title">各星價格（百元）</div>';priceSection.appendChild(priceEditor(state.fresh.prices,stars,'fresh-price',true));body.appendChild(priceSection);
+  const priceSection=document.createElement('div');priceSection.className='section';
+  if(state.fresh.mode==='car'){
+    const count=freshCarCount();priceSection.innerHTML='<div class="section-title">車／包價格（百元）</div>';
+    priceSection.appendChild(carPriceEditor('車','var(--purple)',()=>state.fresh.carPrice,value=>state.fresh.carPrice=value,'fresh-car-price',!count));
+    priceSection.appendChild(carPriceEditor('包','var(--green)',()=>state.fresh.packPrice,value=>state.fresh.packPrice=value,'fresh-pack-price',!count));
+  }else{
+    priceSection.innerHTML='<div class="section-title">各星價格（百元）</div>';
+    priceSection.appendChild(priceEditor(state.fresh.prices,stars,'fresh-price',true));
+  }
+  body.appendChild(priceSection);
   const note=document.createElement('div');note.className='preview';note.id='freshCompact';note.innerHTML=compactStars(stars);body.appendChild(note);
   return body;
 }
@@ -467,7 +533,12 @@ function freshDisplay(){
 function fitDisplay(el,text){const n=text.length;el.style.fontSize=(n>65?19:n>45?23:n>30?28:n>20?34:n>12?42:52)+'px'}
 function freshStars(){
   if(state.fresh.mode==='pair')return starsForPair(state.fresh.pair||+state.fresh.pending||0,state.fresh.maxStar);
+  if(state.fresh.mode==='car')return {};
   const values=state.fresh.columns.slice();if(state.fresh.pending)values.push(+state.fresh.pending);return starsForPillar(values,state.fresh.maxStar);
+}
+function freshCarCount(){
+  const values=state.fresh.columns.slice();if(state.fresh.pending)values.push(+state.fresh.pending);
+  return carsFor(values);
 }
 function freshPriceStars(){
   const calculated=freshStars(),out={};
@@ -478,10 +549,13 @@ function renderCalculated(){
   const stars=freshPriceStars(),note=document.getElementById('freshCompact');
   if(note)note.innerHTML=compactStars(stars);
 }
-function compactStars(stars){return Object.keys(stars).map(Number).map(r=>`<span style="color:${COLORS[r]}">${NAMES[r]} <b>${stars[r]||0}</b>柱</span>`).join('　')}
+function compactStars(stars){
+  if(state.fresh.mode==='car')return`<span style="color:var(--purple)">車 <b>${freshCarCount()}</b>車</span>`;
+  return Object.keys(stars).map(Number).map(r=>`<span style="color:${COLORS[r]}">${NAMES[r]} <b>${stars[r]||0}</b>柱</span>`).join('　');
+}
 function summary(stars,unit){
   const box=document.createElement('div');box.className='star-summary';
-  box.innerHTML=Object.entries(stars).map(([r,n])=>`<span style="color:${COLORS[r]}">${NAMES[r]} ${n}${unit}</span>`).join('')||'<span style="color:var(--muted)">尚無有效星數</span>';
+  box.innerHTML=Object.entries(stars).map(([r,n])=>`<span style="color:${r==='car'?'var(--purple)':COLORS[r]}">${r==='car'?'車':NAMES[r]} ${n}${unit}</span>`).join('')||'<span style="color:var(--muted)">尚無有效組數</span>';
   return box;
 }
 function actionRow(label,onAdd,onClear){
@@ -501,20 +575,32 @@ function submit(kind){
     if(p.values.filter(v=>v>0).length<2)return alert('至少需要2柱非零');
     item={type:'pi',desc:`立柱 ${p.values.join('×')}`,stars,starPrices:{...p.prices}};
     p.values=Array(p.columns).fill(0);p.active=0;p.buffer='';p.prices={};state.old.focus='qty';
+  }else if(kind==='old-car'){
+    const p=state.old.car,count=carsFor(p.values);
+    if(!count)return alert('至少需要2欄非零');
+    item={type:'car',desc:`車 ${p.values.join('×')}`,stars:{car:count,pack:count},starPrices:{car:p.price,pack:p.packPrice}};
+    p.values=Array(p.columns).fill(0);p.active=0;p.buffer='';p.price='';p.packPrice='';state.old.focus='qty';
   }else{
     commitFreshPending();
-    const stars=freshStars();
     if(state.fresh.mode==='pair'&&!state.fresh.pair)return alert('請先輸入連碰組數');
     if(state.fresh.mode==='pillar'&&state.fresh.columns.length<2)return alert('至少需要2柱非零');
-    item={type:state.fresh.mode==='pair'?'lp':'pi',desc:state.fresh.mode==='pair'?`連碰 ${state.fresh.pair}個`:`立柱 ${state.fresh.columns.join('×')}`,stars,starPrices:{...state.fresh.prices}};
-    state.fresh.pending='';state.fresh.pair=null;state.fresh.columns=[];state.fresh.prices={};state.fresh.focus='qty';
+    if(state.fresh.mode==='car'&&state.fresh.columns.length<2)return alert('至少需要2欄非零');
+    if(state.fresh.mode==='car'){
+      const count=carsFor(state.fresh.columns);
+      item={type:'car',desc:`車 ${state.fresh.columns.join('×')}`,stars:{car:count,pack:count},starPrices:{car:state.fresh.carPrice,pack:state.fresh.packPrice}};
+    }else{
+      const stars=freshStars();
+      item={type:state.fresh.mode==='pair'?'lp':'pi',desc:state.fresh.mode==='pair'?`連碰 ${state.fresh.pair}個`:`立柱 ${state.fresh.columns.join('×')}`,stars,starPrices:{...state.fresh.prices}};
+    }
+    state.fresh.pending='';state.fresh.pair=null;state.fresh.columns=[];state.fresh.prices={};state.fresh.carPrice='';state.fresh.packPrice='';state.fresh.focus='qty';
   }
   item.id=state.nextId++;state.list.push(item);save();render();focusCurrentQuantity();showStatus(`已加入清單，目前 ${state.list.length} 筆`);
 }
 function clearInput(kind){
   if(kind==='old-pair'){Object.assign(state.old.pair,{count:0,buffer:'',prices:{}})}
   else if(kind==='old-pillar'){Object.assign(state.old.pillar,{values:Array(state.old.pillar.columns).fill(0),active:0,buffer:'',prices:{}})}
-  else{Object.assign(state.fresh,{pending:'',pair:null,columns:[],prices:{},focus:'qty'})}
+  else if(kind==='old-car'){Object.assign(state.old.car,{values:Array(state.old.car.columns).fill(0),active:0,buffer:'',price:'',packPrice:''})}
+  else{Object.assign(state.fresh,{pending:'',pair:null,columns:[],prices:{},carPrice:'',packPrice:'',focus:'qty'})}
   if(kind!=='new')state.old.focus='qty';
   save();render();focusCurrentQuantity();
 }
@@ -527,7 +613,7 @@ function backspaceFresh(){
   const f=state.fresh;
   if(f.pending)f.pending=f.pending.slice(0,-1);
   else if(f.mode==='pair'&&f.pair)f.pair=+String(f.pair).slice(0,-1)||null;
-  else if(f.mode==='pillar')f.columns.pop();
+  else if(f.mode==='pillar'||f.mode==='car')f.columns.pop();
   save();refreshNewInput();
 }
 function backspaceOld(){
@@ -538,7 +624,7 @@ function backspaceOld(){
     p.buffer=source.slice(0,-1);
     p.count=parseInt(p.buffer,10)||0;
   }else{
-    const p=state.old.pillar;
+    const p=state.old[state.old.mode];
     const source=p.buffer||String(p.values[p.active]||'');
     p.buffer=source.slice(0,-1);
     p.values[p.active]=parseInt(p.buffer,10)||0;
@@ -548,7 +634,7 @@ function backspaceOld(){
 function focusCurrentQuantity(){
   requestAnimationFrame(()=>{
     if(state.page==='new')document.getElementById('freshDisplay')?.focus();
-    else if(state.page==='old'&&state.old.mode==='pillar')document.querySelector('#oldInput .pillar.active')?.focus();
+    else if(state.page==='old'&&(state.old.mode==='pillar'||state.old.mode==='car'))document.querySelector('#oldInput .pillar.active')?.focus();
     else if(state.page==='old')document.querySelector('#oldInput .number-display')?.focus();
   });
 }
@@ -565,13 +651,13 @@ function buildTotalTable(){
   const wrap=document.createElement('div');
   if(!state.list.length){wrap.innerHTML='<div class="empty">尚無資料</div>';return wrap}
   const {byStar,grand}=totals();
-  const stars=[...new Set(state.list.flatMap(x=>Object.keys(x.stars||{}).map(Number)))].sort((a,b)=>a-b);
+  const stars=[...new Set(state.list.flatMap(x=>Object.keys(x.stars||{})))].sort(metricSort);
   wrap.innerHTML=`<div class="total-grand"><span>總金額</span><span>${fmt(grand)} 元</span></div>
-    <div class="total-head"><span class="cell-index">合</span>${stars.map(r=>`<span class="cell-star" style="color:${COLORS[r]}">${fmt(byStar[r]||0)}</span>`).join('')}<span style="width:24px"></span></div>
-    <div class="total-row"><span class="cell-index">#</span>${stars.map(r=>`<span class="cell-star" style="color:${COLORS[r]}">${NAMES[r]}</span>`).join('')}<span style="width:24px"></span></div>`;
+    <div class="total-head"><span class="cell-index">合</span>${stars.map(r=>`<span class="cell-star" style="color:${metricColor(r)}">${fmt(byStar[r]||0)}</span>`).join('')}<span style="width:24px"></span></div>
+    <div class="total-row"><span class="cell-index">#</span>${stars.map(r=>`<span class="cell-star" style="color:${metricColor(r)}">${metricName(r)}</span>`).join('')}<span style="width:24px"></span></div>`;
   state.list.forEach((item,index)=>{
     const row=document.createElement('div');row.className='total-row';
-    row.innerHTML=`<span class="cell-index">${index+1}</span>${stars.map(r=>{const v=amountHundred(item.stars?.[r]||0,item.starPrices?.[r]);return`<span class="cell-star" style="color:${v===null?'var(--muted)':COLORS[r]}">${v===null?'—':fmt(v)}</span>`}).join('')}<button class="delete">×</button>`;
+    row.innerHTML=`<span class="cell-index">${index+1}</span>${stars.map(r=>{const v=amountHundred(item.stars?.[r]||0,item.starPrices?.[r]);return`<span class="cell-star" style="color:${v===null?'var(--muted)':metricColor(r)}">${v===null?'—':fmt(v)}</span>`}).join('')}<button class="delete">×</button>`;
     row.querySelector('button').onclick=()=>deleteItem(item.id);wrap.appendChild(row);
   });
   return wrap;
@@ -585,13 +671,14 @@ function renderList(){
   else{
     const {byStar,grand}=totals();
     totalsBox.innerHTML=`<div class="list-total-row"><b>總金額</b><b>${fmt(grand)} 元</b></div>`+
-      Object.keys(byStar).map(Number).sort((a,b)=>a-b).map(r=>`<div class="list-total-row"><span style="color:${COLORS[r]}">${NAMES[r]}</span><span>${fmt(byStar[r])} 柱</span></div>`).join('');
+      Object.keys(byStar).sort(metricSort).map(r=>`<div class="list-total-row"><span style="color:${metricColor(r)}">${metricName(r)}</span><span>${fmt(byStar[r])} ${metricUnit(r)}</span></div>`).join('');
   }
   const details=document.getElementById('listDetails');details.innerHTML='';
   if(!count){details.innerHTML='<div class="empty">尚未加入任何組合</div>';return}
   state.list.forEach(item=>{
     const row=document.createElement('div');row.className='list-item';
-    row.innerHTML=`<div class="list-main"><span class="tag ${item.type}">${item.type==='pi'?'立柱':'連碰'}</span><div class="desc">${item.desc}</div><div class="details">${Object.entries(item.stars||{}).map(([r,n])=>{const price=item.starPrices?.[r]||0,amount=amountYuan(n,price);return`<span style="color:${COLORS[r]}">${NAMES[r]}</span> ${n}注${amount===null?'':` × ${price} = ${fmt(amount)}元`}`}).join('<br>')||'缺少明細'}</div></div><button class="delete">×</button>`;
+    const typeName=item.type==='pi'?'立柱':item.type==='car'?'車':'連碰';
+    row.innerHTML=`<div class="list-main"><span class="tag ${item.type}">${typeName}</span><div class="desc">${item.desc}</div><div class="details">${Object.entries(item.stars||{}).map(([r,n])=>{const price=item.starPrices?.[r],amount=amountYuan(n,price);return`<span style="color:${metricColor(r)}">${metricName(r)}</span> ${n}${r==='car'?'車':r==='pack'?'包':'注'}${amount===null?'':` × ${price} = ${fmt(amount)}元`}`}).join('<br>')||'缺少明細'}</div></div><button class="delete">×</button>`;
     row.querySelector('button').onclick=()=>deleteItem(item.id);details.appendChild(row);
   });
 }
@@ -613,9 +700,10 @@ function shortcutAction(e){
   return Object.keys(state.shortcuts).find(action=>state.shortcuts[action].includes(signature))||null;
 }
 function keyName(signature){
+  if(signature==='Shift+Digit8')return '主鍵盤 *';
   const names={
     Ctrl:'Ctrl',Alt:'Alt',Shift:'Shift',Meta:'Windows',
-    NumLock:'Num Lock',NumpadDivide:'數字鍵盤 ÷',NumpadAdd:'數字鍵盤 +',
+    NumLock:'Num Lock',NumpadDivide:'數字鍵盤 ÷',NumpadMultiply:'數字鍵盤 *',NumpadAdd:'數字鍵盤 +',
     NumpadEnter:'數字鍵盤 Enter',Enter:'Enter',Tab:'Tab',Backspace:'Backspace',
     Escape:'Esc',Slash:'/',Equal:'=',Space:'空白鍵'
   };
@@ -689,13 +777,13 @@ function inputDigit(d){
     if(state.old.mode==='pair'){
       const p=state.old.pair;p.buffer=(p.buffer+d).slice(-2);p.count=clamp(p.buffer,0,39,0);
     }else{
-      const p=state.old.pillar;p.buffer=(p.buffer+d).slice(-2);p.values[p.active]=clamp(p.buffer,0,p.maxValue,0);
+      const p=state.old[state.old.mode];p.buffer=(p.buffer+d).slice(-2);p.values[p.active]=clamp(p.buffer,0,p.maxValue,0);
     }
     save();refreshOldInput();
-    if(state.old.mode==='pillar'&&state.old.pillar.autoAdvance){
-      const p=state.old.pillar;
+    if((state.old.mode==='pillar'||state.old.mode==='car')&&state.old[state.old.mode].autoAdvance){
+      const p=state.old[state.old.mode];
       const requiredDigits=p.maxValue<=9?1:2;
-      if(p.buffer.length>=requiredDigits)advanceOldPillar();
+      if(p.buffer.length>=requiredDigits)advanceOldColumns();
       else focusCurrentQuantity();
     }
     return true;
@@ -705,29 +793,29 @@ function inputDigit(d){
   }
   return false;
 }
-function advanceOldPillar(){
-  const p=state.old.pillar;p.buffer='';
+function advanceOldColumns(){
+  const mode=state.old.mode,p=state.old[mode];p.buffer='';
   if(p.active<p.columns-1){
     p.active++;save();refreshOldInput();
     document.querySelector('#oldInput .pillar.active')?.focus();
     return;
   }
-  const first=Object.keys(starsForPillar(p.values,p.maxStar))[0];
-  if(first){
-    state.old.focus='old-pillar-price-'+first;save();refreshOldInput();
+  const priceId=mode==='car'?(carsFor(p.values)?'old-car-price':''):('old-pillar-price-'+Object.keys(starsForPillar(p.values,p.maxStar))[0]);
+  if(priceId&&!priceId.endsWith('undefined')){
+    state.old.focus=priceId;save();refreshOldInput();
     document.getElementById(state.old.focus)?.focus();
   }
 }
 function enterAction(){
   if(state.page==='old'){
     if(state.old.focus==='qty'){
-      if(state.old.mode==='pillar'){
-        advanceOldPillar();return;
+      if(state.old.mode==='pillar'||state.old.mode==='car'){
+        advanceOldColumns();return;
       }
-      const first=state.old.mode==='pair'?Object.keys(starsForPair(state.old.pair.count,state.old.pair.maxStar))[0]:Object.keys(starsForPillar(state.old.pillar.values,state.old.pillar.maxStar))[0];
+      const first=Object.keys(starsForPair(state.old.pair.count,state.old.pair.maxStar))[0];
       if(first){
-        if(state.old.mode==='pair')state.old.pair.buffer='';
-        state.old.focus=(state.old.mode==='pair'?'old-pair-price-':'old-pillar-price-')+first;
+        state.old.pair.buffer='';
+        state.old.focus='old-pair-price-'+first;
         save();refreshOldInput();document.getElementById(state.old.focus)?.focus();
       }
     }else cyclePriceFocus('old');
@@ -735,10 +823,10 @@ function enterAction(){
   }
   if(state.page==='new'){
     if(state.fresh.focus==='qty'){
-      if(state.fresh.mode==='pillar'){
+      if(state.fresh.mode==='pillar'||state.fresh.mode==='car'){
         if(commitFreshPending()){save();refreshNewInput();return}
-        const first=Object.keys(freshStars())[0];
-        if(first){state.fresh.focus='fresh-price-'+first;refreshNewInput();document.getElementById(state.fresh.focus)?.focus()}
+        const priceId=state.fresh.mode==='car'?(freshCarCount()?'fresh-car-price':''):('fresh-price-'+Object.keys(freshStars())[0]);
+        if(priceId&&!priceId.endsWith('undefined')){state.fresh.focus=priceId;refreshNewInput();document.getElementById(state.fresh.focus)?.focus()}
         return;
       }
       if(commitFreshPending()){save();refreshNewInput()}
@@ -748,6 +836,19 @@ function enterAction(){
   }
 }
 function cyclePriceFocus(scope){
+  const isCar=scope==='new'?state.fresh.mode==='car':state.old.mode==='car';
+  if(isCar){
+    const current=scope==='new'?state.fresh.focus:state.old.focus;
+    const carId=scope==='new'?'fresh-car-price':'old-car-price';
+    const packId=scope==='new'?'fresh-pack-price':'old-pack-price';
+    if(current===carId){
+      if(scope==='new')state.fresh.focus=packId;else state.old.focus=packId;
+      save();document.getElementById(packId)?.focus();return;
+    }
+    if(scope==='new'){state.fresh.focus='qty';save();refreshNewInput();document.getElementById('freshDisplay')?.focus()}
+    else{state.old.focus='qty';state.old.car.active=0;save();refreshOldInput();document.querySelector('#oldInput .pillar.active')?.focus()}
+    return;
+  }
   const prefix=scope==='new'?'fresh-price-':state.old.mode==='pair'?'old-pair-price-':'old-pillar-price-';
   const current=scope==='new'?state.fresh.focus:state.old.focus;
   const stars=scope==='new'
@@ -795,7 +896,7 @@ document.addEventListener('keydown',e=>{
   const action=shortcutAction(e);
   if(action==='clearAll'){if(state.list.length&&confirm('確定清除全部清單？')){state.list=[];save();render()}return}
   if(action==='submit'&&!e.target.classList.contains('direct')){
-    e.preventDefault();submit(state.page==='new'?'new':state.old.mode==='pair'?'old-pair':'old-pillar');return;
+    e.preventDefault();submit(state.page==='new'?'new':state.old.mode==='pair'?'old-pair':state.old.mode==='car'?'old-car':'old-pillar');return;
   }
   if(e.target.matches('input')){
     if(action==='next'&&e.target.classList.contains('price')){
@@ -817,6 +918,15 @@ document.addEventListener('keydown',e=>{
       state.old.pillar.active=0;state.old.pillar.buffer='';
       save();renderOld();focusCurrentQuantity();
     }else if(state.page==='new')resetFreshMode('pillar');
+    return;
+  }
+  if(action==='modeCar'){
+    e.preventDefault();
+    if(state.page==='old'){
+      state.old.mode='car';state.old.focus='qty';
+      state.old.car.active=0;state.old.car.buffer='';
+      save();renderOld();focusCurrentQuantity();
+    }else if(state.page==='new')resetFreshMode('car');
     return;
   }
   if(action?.startsWith('digit')&&inputDigit(action.slice(-1))){e.preventDefault();return}

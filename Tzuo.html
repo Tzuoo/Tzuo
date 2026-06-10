@@ -185,7 +185,11 @@ let keyCapture=null;
 
 function clone(value){return JSON.parse(JSON.stringify(value));}
 function loadJson(key,fallback){try{return JSON.parse(localStorage.getItem(key)||'null')||fallback}catch{return fallback}}
-function cleanNumber(value){return String(value??'').replace(/[^0-9.]/g,'').replace(/^(\d*\.\d*).*$/,'$1');}
+function cleanNumber(value){
+  const text=String(value??'').replace(/,/g,'.').replace(/[^0-9.]/g,'');
+  const dot=text.indexOf('.');
+  return dot<0?text:text.slice(0,dot+1)+text.slice(dot+1).replace(/\./g,'');
+}
 function clamp(value,min,max,fallback){const n=parseInt(value,10);return Math.max(min,Math.min(max,Number.isFinite(n)?n:fallback));}
 function combination(n,r){if(r<0||r>n)return 0;let x=1;for(let i=1;i<=r;i++)x=x*(n-r+i)/i;return Math.round(x);}
 function combinations(values,r){
@@ -339,7 +343,17 @@ function priceEditor(prices,stars,prefix,disableZero=false){
     if(disabled)row.classList.add('disabled');
     row.innerHTML=`<label style="color:${COLORS[r]}">${NAMES[r]}</label><input id="${prefix}-${r}" class="price" inputmode="decimal" value="${prices[r]||''}" placeholder="${disabled?'無法成立':'輸入價格'}" ${disabled?'disabled':''}>`;
     const input=row.querySelector('input');
-    input.oninput=()=>{input.value=cleanNumber(input.value);prices[r]=input.value;save();renderCalculated()};
+    const update=()=>{input.value=cleanNumber(input.value);prices[r]=input.value;save();renderCalculated()};
+    input.oninput=update;
+    input.onkeydown=e=>{
+      if(!(e.code==='NumpadDecimal'||e.key==='Decimal'||e.key==='.'||e.key===','))return;
+      e.preventDefault();
+      const start=input.selectionStart??input.value.length,end=input.selectionEnd??start;
+      input.value=cleanNumber(input.value.slice(0,start)+'.'+input.value.slice(end));
+      const caret=Math.min(start+1,input.value.length);
+      input.setSelectionRange(caret,caret);
+      update();
+    };
     input.onfocus=()=>{setFocus(input.id);setTimeout(()=>input.select(),0)};
     box.appendChild(row);
   });

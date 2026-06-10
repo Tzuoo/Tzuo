@@ -1,0 +1,818 @@
+<!doctype html>
+<html lang="zh-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tzuo</title>
+<style>
+:root{
+  --bg:#0f1117;--panel:#1a1d27;--panel2:#22263a;--line:#2e3450;
+  --text:#e8eaf6;--muted:#8790ae;--blue:#60a5fa;--green:#34d399;
+  --yellow:#fbbf24;--red:#f87171;--purple:#c084fc;--accent:#4f7cff;
+}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;background:var(--bg);color:var(--text);font-family:"Microsoft JhengHei","Noto Sans TC",sans-serif}
+button,input{font:inherit}
+button{cursor:pointer}
+header{position:sticky;top:0;z-index:1000;background:#0f1117;border-bottom:1px solid var(--line);padding:10px 12px 0}
+h1{margin:0 0 8px;text-align:center;font-size:16px;color:#9db5ff}
+.tabs{display:flex;justify-content:center;gap:5px}
+.tab{padding:8px 18px;border:1px solid transparent;border-bottom:0;border-radius:8px 8px 0 0;background:transparent;color:var(--muted)}
+.tab.active{background:var(--panel);border-color:var(--line);color:#fff}
+.badge{display:none;margin-left:4px;padding:1px 6px;border-radius:8px;background:var(--accent);color:#fff;font-size:10px}
+.page{display:none;padding:10px 10px 80px}
+.page.active{display:block}
+.workspace{position:relative;min-height:1050px}
+.panel{position:absolute;background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:0 4px 18px rgba(0,0,0,.28);min-width:280px;overflow:hidden}
+.panel-head{height:36px;padding:0 10px;background:var(--panel2);border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;cursor:grab;touch-action:none;user-select:none}
+.panel-title{font-size:12px;font-weight:800;letter-spacing:1px;color:#c7d2fe}
+.collapse{width:23px;height:23px;border:0;border-radius:5px;background:transparent;color:var(--muted);font-size:15px}
+.panel-body{padding:11px}
+.panel.collapsed{height:36px!important;min-height:36px!important}
+.panel.collapsed .panel-body,.panel.collapsed .resize{display:none}
+.resize{position:absolute;right:0;bottom:0;width:27px;height:27px;display:flex;align-items:flex-end;justify-content:flex-end;padding:3px;color:var(--muted);cursor:se-resize;touch-action:none;user-select:none}
+.section{padding:8px 0;border-bottom:1px solid var(--line)}
+.section:last-child{border-bottom:0}
+.section-title{margin-bottom:7px;font-size:11px;font-weight:700;color:var(--muted)}
+.mode-row,.control-row,.price-row,.actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.mode-btn{flex:1;min-width:100px;padding:10px;border:1px solid var(--line);border-radius:9px;background:#151928;color:var(--muted);font-weight:800}
+.mode-btn.active{border-color:var(--yellow);color:#fff;box-shadow:0 0 0 2px rgba(251,191,36,.15)}
+.control{display:flex;align-items:center;border:1px solid var(--line);border-radius:18px;overflow:hidden;background:var(--panel2)}
+.control button{width:30px;height:30px;border:0;background:transparent;color:#fff}
+.control span{padding:0 5px;font-size:11px;color:var(--muted)}
+.direct{width:36px;border:0;outline:0;background:transparent;color:var(--blue);text-align:center;font-weight:800}
+.number-display{width:100%;min-height:78px;padding:12px;border:2px solid var(--line);border-radius:12px;background:#111522;display:flex;align-items:center;justify-content:center;text-align:center;font-family:Consolas,monospace;font-size:48px;font-weight:800;line-height:1.16;overflow-wrap:anywhere;word-break:break-word}
+.number-display.focused{border-color:var(--yellow);box-shadow:0 0 0 3px rgba(251,191,36,.14)}
+.pillar-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin:8px 0}
+.pillar{min-height:52px;border:2px solid var(--line);border-radius:9px;background:#111522;color:#fff;font-family:Consolas,monospace;font-size:21px;font-weight:800}
+.pillar.active{border-color:var(--yellow)}
+.preview{margin-top:8px;line-height:1.9;font-size:12px;color:var(--muted)}
+.price-row{margin-bottom:6px}
+.price-row label{width:45px;font-size:12px;font-weight:700}
+.price{flex:1;min-width:90px;padding:9px;border:1px solid var(--line);border-radius:8px;background:#111522;color:#fff;text-align:right;font-family:Consolas,monospace}
+.price-row.disabled{opacity:.38}
+.price-row.disabled .price{cursor:not-allowed;background:#0d1018;color:var(--muted)}
+.actions button{flex:1;padding:9px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);color:#fff}
+.actions .primary{background:var(--accent);border-color:var(--accent);font-weight:800}
+.actions .danger{color:var(--red)}
+.star-summary{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;font-size:13px;font-weight:700}
+.total-head,.total-row{display:flex;align-items:center;gap:4px;padding:6px;border-bottom:1px solid var(--line)}
+.total-head{background:rgba(79,124,255,.12);font-weight:800}
+.total-grand{display:flex;justify-content:space-between;padding:9px;background:rgba(79,124,255,.17);border-bottom:2px solid var(--accent);color:#bfdbfe;font-weight:800}
+.cell-index{width:28px;flex:none;color:var(--muted);font-size:11px}
+.cell-star{flex:1;text-align:right;font-family:Consolas,monospace;font-size:12px}
+.delete{width:24px;height:24px;border:0;background:transparent;color:var(--muted);font-size:17px}
+.empty{padding:18px;text-align:center;color:var(--muted);font-size:12px}
+.list-wrap{max-width:850px;margin:auto}
+.list-toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.card{margin-bottom:10px;border:1px solid var(--line);border-radius:12px;background:var(--panel);overflow:hidden}
+.card-title{padding:8px 12px;background:var(--panel2);color:var(--muted);font-size:11px;font-weight:800}
+.list-item{display:flex;gap:8px;padding:10px 12px;border-bottom:1px solid var(--line)}
+.list-main{flex:1}
+.tag{display:inline-block;padding:2px 7px;border-radius:8px;font-size:10px;font-weight:800}
+.tag.lp{background:rgba(96,165,250,.16);color:var(--blue)}
+.tag.pi{background:rgba(52,211,153,.16);color:var(--green)}
+.desc{margin:3px 0;font-family:Consolas,monospace;font-size:13px}
+.details{line-height:1.8;color:var(--muted);font-size:12px}
+.list-total-row{display:flex;justify-content:space-between;padding:8px 12px;border-bottom:1px solid var(--line)}
+.key-intro{padding:12px;color:var(--muted);font-size:12px;line-height:1.7}
+.key-row{display:grid;grid-template-columns:minmax(110px,180px) 1fr;gap:10px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--line)}
+.key-label{font-weight:800;font-size:13px}
+.key-bindings{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.key-binding,.key-add{padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:#111522;color:#bfdbfe}
+.key-binding{display:inline-flex;gap:8px;align-items:center}
+.key-remove{color:var(--muted);font-weight:800}
+.key-add{color:var(--green)}
+.key-actions{display:flex;justify-content:flex-end;padding:12px}
+.key-capture{position:fixed;inset:0;z-index:4000;display:none;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,.68)}
+.key-capture.open{display:flex}
+.key-capture-box{width:min(380px,100%);padding:24px;border:1px solid var(--line);border-radius:14px;background:var(--panel);text-align:center;box-shadow:0 18px 50px rgba(0,0,0,.45)}
+.key-capture-title{font-size:18px;font-weight:800;color:#fff}
+.key-capture-help{margin:10px 0 18px;color:var(--muted);font-size:13px;line-height:1.7}
+.status{position:fixed;left:50%;top:72px;z-index:3000;transform:translateX(-50%);display:none;padding:8px 14px;border-radius:8px;background:#047857;color:#fff;font-size:13px;font-weight:800}
+@media(max-width:900px){
+  .tab{flex:1;padding:8px 3px}
+  .workspace{min-height:1250px}
+  .panel{min-width:250px}
+  .pillar-grid{grid-template-columns:repeat(4,1fr)}
+  .key-row{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>Tzuo</h1>
+  <div class="tabs">
+    <button class="tab active" data-page="old">舊版輸入</button>
+    <button class="tab" data-page="new">新版組數</button>
+    <button class="tab" data-page="list">清單<span id="listBadge" class="badge"></span></button>
+    <button class="tab" data-page="keys">快捷鍵</button>
+  </div>
+</header>
+
+<main>
+  <section id="page-old" class="page active"><div id="oldWorkspace" class="workspace"></div></section>
+  <section id="page-new" class="page"><div id="newWorkspace" class="workspace"></div></section>
+  <section id="page-list" class="page">
+    <div class="list-wrap">
+      <div class="list-toolbar"><span id="listCount">0 組</span><button id="clearAll" class="mode-btn" style="flex:none">清除全部</button></div>
+      <div class="card"><div class="card-title">總計</div><div id="listTotals"></div></div>
+      <div class="card"><div class="card-title">明細</div><div id="listDetails"></div></div>
+    </div>
+  </section>
+  <section id="page-keys" class="page">
+    <div class="list-wrap">
+      <div class="card">
+        <div class="card-title">快捷鍵設定</div>
+        <div class="key-intro">點選鍵位即可重新設定；同一功能可保留多個鍵位。設定會自動保存，電腦與外接 F20 鍵盤都以實際按下的按鍵為準。</div>
+        <div id="keySettings"></div>
+        <div class="key-actions"><button id="resetKeys" class="mode-btn" style="flex:none">恢復預設鍵位</button></div>
+      </div>
+    </div>
+  </section>
+</main>
+<div id="status" class="status"></div>
+<div id="keyCapture" class="key-capture">
+  <div class="key-capture-box">
+    <div id="keyCaptureTitle" class="key-capture-title">請按新按鍵</div>
+    <div class="key-capture-help">可使用主鍵盤、數字鍵盤或組合鍵。按下後立即保存。</div>
+    <button id="cancelKeyCapture" class="mode-btn">取消</button>
+  </div>
+</div>
+
+<script>
+(()=>{
+'use strict';
+
+const STATE_KEY='539_clean_v70_final_state';
+const LAYOUT_KEY='539_clean_v70_final_layout';
+const LEGACY_KEY='539appStatePersistent_mobile_v3';
+const LEGACY_NEW_KEY='539_v27_count_only_integrated';
+const COLORS={2:'#60a5fa',3:'#34d399',4:'#fbbf24',5:'#f87171',6:'#c084fc',7:'#38bdf8',8:'#a3e635',9:'#fb923c'};
+const NAMES={2:'二星',3:'三星',4:'四星',5:'五星',6:'六星',7:'七星',8:'八星',9:'九星'};
+const SHORTCUT_LABELS={
+  modePair:'切換連碰',modePillar:'切換立柱',submit:'加入清單',
+  next:'確認／下一欄',backspace:'退一碼',clearAll:'清除全部',
+  digit0:'輸入數字 0',digit1:'輸入數字 1',digit2:'輸入數字 2',digit3:'輸入數字 3',digit4:'輸入數字 4',
+  digit5:'輸入數字 5',digit6:'輸入數字 6',digit7:'輸入數字 7',digit8:'輸入數字 8',digit9:'輸入數字 9'
+};
+const DEFAULT_SHORTCUTS={
+  modePair:['NumLock'],modePillar:['NumpadDivide','Slash'],submit:['NumpadAdd','Shift+Equal'],
+  next:['Enter','NumpadEnter','Tab'],backspace:['Backspace'],clearAll:['Escape'],
+  digit0:['Digit0','Numpad0'],digit1:['Digit1','Numpad1'],digit2:['Digit2','Numpad2'],digit3:['Digit3','Numpad3'],digit4:['Digit4','Numpad4'],
+  digit5:['Digit5','Numpad5'],digit6:['Digit6','Numpad6'],digit7:['Digit7','Numpad7'],digit8:['Digit8','Numpad8'],digit9:['Digit9','Numpad9']
+};
+
+const defaults={
+  page:'old',
+  list:[],
+  nextId:1,
+  shortcutVersion:1,
+  shortcuts:DEFAULT_SHORTCUTS,
+  old:{
+    mode:'pair',focus:'qty',pair:{count:5,maxStar:4,buffer:'',prices:{}},
+    pillar:{columns:4,maxValue:10,maxStar:4,values:[1,1,1,1],active:0,buffer:'',prices:{},autoAdvance:true}
+  },
+  fresh:{
+    mode:'pair',focus:'qty',pending:'',pair:null,columns:[],maxStar:4,prices:{2:'',3:'',4:''}
+  }
+};
+
+let state=loadState();
+let layout=loadJson(LAYOUT_KEY,{});
+let statusTimer=0;
+let keyCapture=null;
+
+function clone(value){return JSON.parse(JSON.stringify(value));}
+function loadJson(key,fallback){try{return JSON.parse(localStorage.getItem(key)||'null')||fallback}catch{return fallback}}
+function cleanNumber(value){return String(value??'').replace(/[^0-9.]/g,'').replace(/^(\d*\.\d*).*$/,'$1');}
+function clamp(value,min,max,fallback){const n=parseInt(value,10);return Math.max(min,Math.min(max,Number.isFinite(n)?n:fallback));}
+function combination(n,r){if(r<0||r>n)return 0;let x=1;for(let i=1;i<=r;i++)x=x*(n-r+i)/i;return Math.round(x);}
+function combinations(values,r){
+  let total=0;
+  const walk=(start,depth,product)=>{
+    if(depth===r){total+=product;return;}
+    for(let i=start;i<values.length;i++)walk(i+1,depth+1,product*values[i]);
+  };
+  walk(0,0,1);return total;
+}
+function starsForPair(count,maxStar){
+  const out={};for(let r=2;r<=Math.min(maxStar,count,9);r++)out[r]=combination(count,r);return out;
+}
+function starsForPillar(values,maxStar){
+  const valid=values.filter(v=>v>0),out={};
+  for(let r=2;r<=Math.min(maxStar,valid.length,9);r++)out[r]=combinations(valid,r);
+  return out;
+}
+function amountHundred(count,price){const p=parseFloat(price);return Number.isFinite(p)?count*p:null;}
+function amountYuan(count,price){const h=amountHundred(count,price);return h===null?null:h*100;}
+function fmt(value){return Number(value||0).toLocaleString('en-US',{maximumFractionDigits:8});}
+function safeItem(item,index){
+  return {
+    id:Number.isFinite(+item?.id)?+item.id:index+1,
+    type:item?.type==='pi'?'pi':'lp',
+    desc:String(item?.desc||'舊資料'),
+    stars:item?.stars&&typeof item.stars==='object'?item.stars:{},
+    starPrices:item?.starPrices&&typeof item.starPrices==='object'?item.starPrices:{}
+  };
+}
+
+function loadState(){
+  const saved=loadJson(STATE_KEY,null);
+  if(saved)return mergeState(saved);
+  const next=clone(defaults);
+  const legacy=loadJson(LEGACY_KEY,null);
+  if(legacy){
+    next.list=Array.isArray(legacy.listItems)?legacy.listItems.map(safeItem):[];
+    next.nextId=Math.max(Number(legacy.listIdCounter)||1,...next.list.map(x=>x.id+1));
+    if(Number.isFinite(+legacy.lpNum))next.old.pair.count=+legacy.lpNum;
+    if(Number.isFinite(+legacy.lpStarMax))next.old.pair.maxStar=+legacy.lpStarMax;
+    if(legacy.prices?.lp)next.old.pair.prices=legacy.prices.lp;
+    if(Number.isFinite(+legacy.pcols))next.old.pillar.columns=+legacy.pcols;
+    if(Number.isFinite(+legacy.maxNum))next.old.pillar.maxValue=+legacy.maxNum;
+    if(Number.isFinite(+legacy.pStarMax))next.old.pillar.maxStar=+legacy.pStarMax;
+    if(Array.isArray(legacy.pvals))next.old.pillar.values=legacy.pvals.slice(0,10).map(v=>+v||0);
+    if(legacy.prices?.p)next.old.pillar.prices=legacy.prices.p;
+  }
+  const fresh=loadJson(LEGACY_NEW_KEY,null);
+  if(fresh){
+    next.fresh.mode=fresh.mainMode==='column'?'pillar':'pair';
+    next.fresh.pending=String(fresh.input||'');
+    next.fresh.pair=fresh.pairCount||null;
+    next.fresh.columns=Array.isArray(fresh.columnCounts)?fresh.columnCounts:[];
+    next.fresh.prices={2:fresh.p2||'',3:fresh.p3||'',4:fresh.p4||''};
+  }
+  return mergeState(next);
+}
+function mergeState(saved){
+  const out=clone(defaults);
+  Object.assign(out,saved);
+  out.old={...defaults.old,...saved.old,pair:{...defaults.old.pair,...saved.old?.pair},pillar:{...defaults.old.pillar,...saved.old?.pillar}};
+  out.fresh={...defaults.fresh,...saved.fresh,prices:{...defaults.fresh.prices,...saved.fresh?.prices}};
+  out.shortcuts=clone(DEFAULT_SHORTCUTS);
+  if(saved.shortcutVersion===1&&saved.shortcuts&&typeof saved.shortcuts==='object'){
+    Object.keys(DEFAULT_SHORTCUTS).forEach(action=>{
+      if(Array.isArray(saved.shortcuts[action]))out.shortcuts[action]=saved.shortcuts[action].filter(x=>typeof x==='string');
+    });
+  }
+  out.list=Array.isArray(saved.list)?saved.list.map(safeItem):[];
+  out.nextId=Math.max(Number(saved.nextId)||1,...out.list.map(x=>x.id+1));
+  return out;
+}
+function save(){localStorage.setItem(STATE_KEY,JSON.stringify(state));}
+function saveLayout(){localStorage.setItem(LAYOUT_KEY,JSON.stringify(layout));}
+
+function panel(id,title,body,{left=10,top=10,width=520,resizable=true,autoHeight=false}={}){
+  const saved=layout[id]||{};
+  const el=document.createElement('div');
+  el.className='panel'+(saved.collapsed?' collapsed':'');
+  el.id=id;
+  const maxWidth=Math.max(280,window.innerWidth-20);
+  const requestedWidth=parseFloat(saved.width)||width;
+  const actualWidth=window.innerWidth<=900?Math.min(requestedWidth,maxWidth):requestedWidth;
+  const requestedLeft=parseFloat(saved.left);
+  const actualLeft=window.innerWidth<=900?Math.max(0,Math.min(Number.isFinite(requestedLeft)?requestedLeft:left,window.innerWidth-actualWidth-10)):(Number.isFinite(requestedLeft)?requestedLeft:left);
+  el.style.left=actualLeft+'px';
+  el.style.top=saved.top||top+'px';
+  el.style.width=actualWidth+'px';
+  if(saved.height&&!autoHeight)el.style.height=saved.height;
+  el.innerHTML=`<div class="panel-head"><span class="panel-title">${title}</span><button class="collapse">${saved.collapsed?'⊕':'⊖'}</button></div><div class="panel-body"></div>${resizable?'<div class="resize">◢</div>':''}`;
+  el.querySelector('.panel-body').appendChild(body);
+  bindPanel(el,{resizable,autoHeight});
+  return el;
+}
+function bindPanel(el,{resizable,autoHeight}){
+  const id=el.id,head=el.querySelector('.panel-head'),collapse=el.querySelector('.collapse');
+  let action='',sx=0,sy=0,start={};
+  const begin=(e,type)=>{
+    action=type;sx=e.clientX;sy=e.clientY;
+    const parent=el.parentElement.getBoundingClientRect(),rect=el.getBoundingClientRect();
+    start={left:rect.left-parent.left,top:rect.top-parent.top,width:rect.width,height:rect.height};
+    e.currentTarget.setPointerCapture?.(e.pointerId);e.preventDefault();
+  };
+  const move=e=>{
+    if(!action)return;
+    if(action==='drag'){
+      el.style.left=Math.max(0,Math.min(start.left+e.clientX-sx,el.parentElement.clientWidth-el.offsetWidth))+'px';
+      el.style.top=Math.max(0,start.top+e.clientY-sy)+'px';
+    }else{
+      el.style.width=Math.max(280,Math.min(start.width+e.clientX-sx,el.parentElement.clientWidth-start.left))+'px';
+      el.style.height=Math.max(140,start.height+e.clientY-sy)+'px';
+    }
+  };
+  const end=()=>{
+    if(!action)return;action='';
+    layout[id]={...(layout[id]||{}),left:el.style.left,top:el.style.top,width:el.style.width,height:autoHeight?'':el.style.height,collapsed:el.classList.contains('collapsed')};
+    saveLayout();
+  };
+  head.addEventListener('pointerdown',e=>{if(e.target===collapse)return;begin(e,'drag')});
+  head.addEventListener('pointermove',move);head.addEventListener('pointerup',end);head.addEventListener('pointercancel',end);
+  if(resizable){
+    const resize=el.querySelector('.resize');
+    resize.addEventListener('pointerdown',e=>begin(e,'resize'));
+    resize.addEventListener('pointermove',move);resize.addEventListener('pointerup',end);resize.addEventListener('pointercancel',end);
+  }
+  collapse.addEventListener('click',()=>{
+    el.classList.toggle('collapsed');collapse.textContent=el.classList.contains('collapsed')?'⊕':'⊖';
+    layout[id]={...(layout[id]||{}),collapsed:el.classList.contains('collapsed')};saveLayout();
+  });
+}
+
+function directControl(label,value,min,max,onCommit){
+  const wrap=document.createElement('div');wrap.className='control';
+  wrap.innerHTML=`<button>−</button><span>${label}</span><input class="direct" inputmode="numeric" maxlength="2" value="${value}"><button>＋</button>`;
+  const [minus,plus]=wrap.querySelectorAll('button'),input=wrap.querySelector('input');
+  const commit=()=>{input.value=String(clamp(input.value,min,max,value));onCommit(+input.value)};
+  minus.onclick=()=>{input.value=String(clamp(+input.value-1,min,max,value));commit()};
+  plus.onclick=()=>{input.value=String(clamp(+input.value+1,min,max,value));commit()};
+  input.oninput=()=>{input.value=input.value.replace(/\D/g,'').slice(0,2)};
+  input.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();commit();input.blur()}};
+  input.onchange=commit;input.onclick=()=>input.select();input.onfocus=()=>setTimeout(()=>input.select(),0);
+  return wrap;
+}
+function priceEditor(prices,stars,prefix,disableZero=false){
+  const box=document.createElement('div');
+  Object.keys(stars).map(Number).forEach(r=>{
+    const disabled=disableZero&&!(stars[r]>0);
+    if(disabled)prices[r]='';
+    const row=document.createElement('div');row.className='price-row';
+    if(disabled)row.classList.add('disabled');
+    row.innerHTML=`<label style="color:${COLORS[r]}">${NAMES[r]}</label><input id="${prefix}-${r}" class="price" inputmode="decimal" value="${prices[r]||''}" placeholder="${disabled?'無法成立':'輸入價格'}" ${disabled?'disabled':''}>`;
+    const input=row.querySelector('input');
+    input.oninput=()=>{input.value=cleanNumber(input.value);prices[r]=input.value;save();renderCalculated()};
+    input.onfocus=()=>{setFocus(input.id);setTimeout(()=>input.select(),0)};
+    box.appendChild(row);
+  });
+  return box;
+}
+function setFocus(focus){
+  if(state.page==='old')state.old.focus=focus;
+  else state.fresh.focus=focus;
+  document.querySelectorAll('.number-display').forEach(x=>x.classList.toggle('focused',focus==='qty'&&x.offsetParent));
+}
+
+function renderOld(){
+  const ws=document.getElementById('oldWorkspace');ws.innerHTML='';
+  const body=buildOldBody();
+  ws.appendChild(panel('oldInput','舊版輸入',body,{left:10,top:10,width:540,resizable:true}));
+  const total=document.createElement('div');total.id='oldTotalBody';total.appendChild(buildTotalTable());
+  ws.appendChild(panel('oldTotal','總計',total,{left:10,top:650,width:540,resizable:false,autoHeight:true}));
+  fitTotals();
+}
+function buildOldBody(){
+  const body=document.createElement('div');
+  const modes=document.createElement('div');modes.className='mode-row';
+  modes.innerHTML=`<button class="mode-btn ${state.old.mode==='pair'?'active':''}">連碰</button><button class="mode-btn ${state.old.mode==='pillar'?'active':''}">立柱</button>`;
+  modes.children[0].onclick=()=>{state.old.mode='pair';state.old.focus='qty';state.old.pair.buffer='';save();refreshOldInput()};
+  modes.children[1].onclick=()=>{
+    state.old.mode='pillar';
+    state.old.focus='qty';
+    state.old.pillar.active=0;
+    state.old.pillar.buffer='';
+    save();refreshOldInput();focusCurrentQuantity();
+  };
+  body.appendChild(modes);
+  if(state.old.mode==='pair')body.appendChild(renderOldPair());
+  else body.appendChild(renderOldPillar());
+  return body;
+}
+function refreshOldInput(){
+  const panelEl=document.getElementById('oldInput');
+  if(!panelEl){renderOld();return}
+  const body=panelEl.querySelector('.panel-body');body.innerHTML='';body.appendChild(buildOldBody());
+}
+function renderOldPair(){
+  const p=state.old.pair,wrap=document.createElement('div');
+  const controls=document.createElement('div');controls.className='control-row section';
+  controls.appendChild(directControl('顯示至',p.maxStar,2,9,v=>{p.maxStar=v;save();renderOld()}));wrap.appendChild(controls);
+  const display=document.createElement('div');display.tabIndex=0;display.className='number-display'+(state.old.focus==='qty'?' focused':'');display.textContent=p.buffer||p.count||'--';display.onclick=()=>{state.old.focus='qty';p.buffer='';refreshOldInput();document.querySelector('#oldInput .number-display')?.focus()};wrap.appendChild(display);
+  const stars=starsForPair(p.count,p.maxStar);
+  wrap.appendChild(summary(stars,'注'));
+  const section=document.createElement('div');section.className='section';section.innerHTML='<div class="section-title">各星價格（百元）</div>';section.appendChild(priceEditor(p.prices,stars,'old-pair-price'));wrap.appendChild(section);
+  wrap.appendChild(actionRow('加入清單',()=>submit('old-pair'),()=>clearInput('old-pair')));
+  return wrap;
+}
+function renderOldPillar(){
+  const p=state.old.pillar,wrap=document.createElement('div');
+  const controls=document.createElement('div');controls.className='control-row section';
+  controls.appendChild(directControl('柱',p.columns,2,10,v=>{p.columns=v;p.values=p.values.slice(0,v);while(p.values.length<v)p.values.push(1);p.active=Math.min(p.active,v-1);save();renderOld()}));
+  controls.appendChild(directControl('上限',p.maxValue,1,99,v=>{p.maxValue=v;p.values=p.values.map(x=>Math.min(x,v));save();renderOld()}));
+  controls.appendChild(directControl('至',p.maxStar,2,9,v=>{p.maxStar=v;save();renderOld()}));
+  const auto=document.createElement('button');auto.className='mode-btn';auto.style.flex='none';auto.style.padding='7px 10px';auto.textContent='自動跳 '+(p.autoAdvance?'開':'關');
+  auto.onclick=()=>{p.autoAdvance=!p.autoAdvance;save();refreshOldInput();focusCurrentQuantity()};
+  controls.appendChild(auto);wrap.appendChild(controls);
+  const grid=document.createElement('div');grid.className='pillar-grid';
+  p.values.forEach((value,i)=>{const b=document.createElement('button');b.className='pillar'+(i===p.active&&state.old.focus==='qty'?' active':'');b.innerHTML=`<small>柱${i+1}</small><br>${value}`;b.onclick=()=>{p.active=i;p.buffer='';state.old.focus='qty';refreshOldInput()};grid.appendChild(b)});wrap.appendChild(grid);
+  const stars=starsForPillar(p.values,p.maxStar);
+  const combo=document.createElement('div');combo.className='preview';combo.textContent='組合 '+p.values.join('×');wrap.appendChild(combo);
+  wrap.appendChild(summary(stars,'柱'));
+  const section=document.createElement('div');section.className='section';section.innerHTML='<div class="section-title">各星價格（百元）</div>';section.appendChild(priceEditor(p.prices,stars,'old-pillar-price'));wrap.appendChild(section);
+  wrap.appendChild(actionRow('加入清單',()=>submit('old-pillar'),()=>clearInput('old-pillar')));
+  return wrap;
+}
+
+function renderNew(){
+  const ws=document.getElementById('newWorkspace');ws.innerHTML='';
+  const body=buildNewBody();
+  ws.appendChild(panel('newInput','新版組數輸入',body,{left:10,top:10,width:620,resizable:true}));
+  const total=document.createElement('div');total.id='newTotalBody';total.appendChild(buildTotalTable());
+  ws.appendChild(panel('newTotal','新版組數總計',total,{left:10,top:690,width:620,resizable:false,autoHeight:true}));
+  fitTotals();
+}
+function buildNewBody(){
+  const body=document.createElement('div');
+  const modes=document.createElement('div');modes.className='mode-row';
+  modes.innerHTML=`<button class="mode-btn ${state.fresh.mode==='pair'?'active':''}">連碰</button><button class="mode-btn ${state.fresh.mode==='pillar'?'active':''}">立柱</button>`;
+  modes.children[0].onclick=()=>resetFreshMode('pair');
+  modes.children[1].onclick=()=>resetFreshMode('pillar');
+  body.appendChild(modes);
+  const controls=document.createElement('div');controls.className='control-row section';
+  controls.appendChild(directControl('顯示至',state.fresh.maxStar,2,9,v=>{state.fresh.maxStar=v;save();refreshNewInput()}));
+  body.appendChild(controls);
+  const display=document.createElement('div');display.id='freshDisplay';display.tabIndex=0;display.className='number-display'+(state.fresh.focus==='qty'?' focused':'');display.textContent=freshDisplay();display.onclick=()=>{state.fresh.focus='qty';save();refreshNewInput();document.getElementById('freshDisplay')?.focus()};body.appendChild(display);
+  fitDisplay(display,display.textContent);
+  const actions=document.createElement('div');actions.className='actions';
+  actions.innerHTML='<button>退一碼</button><button class="danger">清空</button>';
+  actions.children[0].onclick=()=>backspaceFresh();actions.children[1].onclick=()=>clearInput('new');body.appendChild(actions);
+  const stars=freshPriceStars();
+  const priceSection=document.createElement('div');priceSection.className='section';priceSection.innerHTML='<div class="section-title">各星價格（百元）</div>';priceSection.appendChild(priceEditor(state.fresh.prices,stars,'fresh-price',true));body.appendChild(priceSection);
+  const note=document.createElement('div');note.className='preview';note.id='freshCompact';note.innerHTML=compactStars(stars);body.appendChild(note);
+  return body;
+}
+function refreshNewInput(){
+  const panelEl=document.getElementById('newInput');
+  if(!panelEl){renderNew();return}
+  const body=panelEl.querySelector('.panel-body');body.innerHTML='';body.appendChild(buildNewBody());
+}
+function resetFreshMode(mode){state.fresh.mode=mode;state.fresh.pending='';state.fresh.pair=null;state.fresh.columns=[];state.fresh.focus='qty';save();refreshNewInput()}
+function freshDisplay(){
+  const f=state.fresh;
+  if(f.mode==='pair')return f.pending||f.pair||'--';
+  const parts=f.columns.map(String);if(f.pending)parts.push(f.pending);return parts.length?parts.join('×'):'--';
+}
+function fitDisplay(el,text){const n=text.length;el.style.fontSize=(n>65?19:n>45?23:n>30?28:n>20?34:n>12?42:52)+'px'}
+function freshStars(){
+  if(state.fresh.mode==='pair')return starsForPair(state.fresh.pair||+state.fresh.pending||0,state.fresh.maxStar);
+  const values=state.fresh.columns.slice();if(state.fresh.pending)values.push(+state.fresh.pending);return starsForPillar(values,state.fresh.maxStar);
+}
+function freshPriceStars(){
+  const calculated=freshStars(),out={};
+  for(let r=2;r<=state.fresh.maxStar;r++)out[r]=calculated[r]||0;
+  return out;
+}
+function renderCalculated(){
+  const stars=freshPriceStars(),note=document.getElementById('freshCompact');
+  if(note)note.innerHTML=compactStars(stars);
+}
+function compactStars(stars){return Object.keys(stars).map(Number).map(r=>`<span style="color:${COLORS[r]}">${NAMES[r]} <b>${stars[r]||0}</b>柱</span>`).join('　')}
+function summary(stars,unit){
+  const box=document.createElement('div');box.className='star-summary';
+  box.innerHTML=Object.entries(stars).map(([r,n])=>`<span style="color:${COLORS[r]}">${NAMES[r]} ${n}${unit}</span>`).join('')||'<span style="color:var(--muted)">尚無有效星數</span>';
+  return box;
+}
+function actionRow(label,onAdd,onClear){
+  const row=document.createElement('div');row.className='actions section';row.innerHTML=`<button class="primary">＋ ${label}</button><button class="danger">清空</button>`;
+  row.children[0].onclick=onAdd;row.children[1].onclick=onClear;return row;
+}
+
+function submit(kind){
+  let item;
+  if(kind==='old-pair'){
+    const p=state.old.pair,stars=starsForPair(p.count,p.maxStar);
+    if(!Object.keys(stars).length)return alert('請先輸入有效連碰組數');
+    item={type:'lp',desc:`連碰 ${p.count}個`,stars,starPrices:{...p.prices}};
+    p.count=0;p.buffer='';p.prices={};state.old.focus='qty';
+  }else if(kind==='old-pillar'){
+    const p=state.old.pillar,stars=starsForPillar(p.values,p.maxStar);
+    if(p.values.filter(v=>v>0).length<2)return alert('至少需要2柱非零');
+    item={type:'pi',desc:`立柱 ${p.values.join('×')}`,stars,starPrices:{...p.prices}};
+    p.values=Array(p.columns).fill(0);p.active=0;p.buffer='';p.prices={};state.old.focus='qty';
+  }else{
+    commitFreshPending();
+    const stars=freshStars();
+    if(state.fresh.mode==='pair'&&!state.fresh.pair)return alert('請先輸入連碰組數');
+    if(state.fresh.mode==='pillar'&&state.fresh.columns.length<2)return alert('至少需要2柱非零');
+    item={type:state.fresh.mode==='pair'?'lp':'pi',desc:state.fresh.mode==='pair'?`連碰 ${state.fresh.pair}個`:`立柱 ${state.fresh.columns.join('×')}`,stars,starPrices:{...state.fresh.prices}};
+    state.fresh.pending='';state.fresh.pair=null;state.fresh.columns=[];state.fresh.prices={};state.fresh.focus='qty';
+  }
+  item.id=state.nextId++;state.list.push(item);save();render();focusCurrentQuantity();showStatus(`已加入清單，目前 ${state.list.length} 筆`);
+}
+function clearInput(kind){
+  if(kind==='old-pair'){Object.assign(state.old.pair,{count:0,buffer:'',prices:{}})}
+  else if(kind==='old-pillar'){Object.assign(state.old.pillar,{values:Array(state.old.pillar.columns).fill(0),active:0,buffer:'',prices:{}})}
+  else{Object.assign(state.fresh,{pending:'',pair:null,columns:[],prices:{},focus:'qty'})}
+  if(kind!=='new')state.old.focus='qty';
+  save();render();focusCurrentQuantity();
+}
+function commitFreshPending(){
+  const n=+state.fresh.pending;if(!n)return false;
+  if(state.fresh.mode==='pair')state.fresh.pair=n;else state.fresh.columns.push(n);
+  state.fresh.pending='';return true;
+}
+function backspaceFresh(){
+  const f=state.fresh;
+  if(f.pending)f.pending=f.pending.slice(0,-1);
+  else if(f.mode==='pair'&&f.pair)f.pair=+String(f.pair).slice(0,-1)||null;
+  else if(f.mode==='pillar')f.columns.pop();
+  save();refreshNewInput();
+}
+function backspaceOld(){
+  if(state.old.focus!=='qty')return false;
+  if(state.old.mode==='pair'){
+    const p=state.old.pair;
+    const source=p.buffer||String(p.count||'');
+    p.buffer=source.slice(0,-1);
+    p.count=parseInt(p.buffer,10)||0;
+  }else{
+    const p=state.old.pillar;
+    const source=p.buffer||String(p.values[p.active]||'');
+    p.buffer=source.slice(0,-1);
+    p.values[p.active]=parseInt(p.buffer,10)||0;
+  }
+  save();refreshOldInput();focusCurrentQuantity();return true;
+}
+function focusCurrentQuantity(){
+  requestAnimationFrame(()=>{
+    if(state.page==='new')document.getElementById('freshDisplay')?.focus();
+    else if(state.page==='old'&&state.old.mode==='pillar')document.querySelector('#oldInput .pillar.active')?.focus();
+    else if(state.page==='old')document.querySelector('#oldInput .number-display')?.focus();
+  });
+}
+
+function totals(){
+  const byStar={};let grand=0;
+  state.list.forEach(item=>Object.entries(item.stars||{}).forEach(([r,count])=>{
+    const value=amountHundred(+count,item.starPrices?.[r]);
+    if(value!==null){byStar[r]=(byStar[r]||0)+value;grand+=value*100}
+  }));
+  return{byStar,grand};
+}
+function buildTotalTable(){
+  const wrap=document.createElement('div');
+  if(!state.list.length){wrap.innerHTML='<div class="empty">尚無資料</div>';return wrap}
+  const {byStar,grand}=totals();
+  const stars=[...new Set(state.list.flatMap(x=>Object.keys(x.stars||{}).map(Number)))].sort((a,b)=>a-b);
+  wrap.innerHTML=`<div class="total-grand"><span>總金額</span><span>${fmt(grand)} 元</span></div>
+    <div class="total-head"><span class="cell-index">合</span>${stars.map(r=>`<span class="cell-star" style="color:${COLORS[r]}">${fmt(byStar[r]||0)}</span>`).join('')}<span style="width:24px"></span></div>
+    <div class="total-row"><span class="cell-index">#</span>${stars.map(r=>`<span class="cell-star" style="color:${COLORS[r]}">${NAMES[r]}</span>`).join('')}<span style="width:24px"></span></div>`;
+  state.list.forEach((item,index)=>{
+    const row=document.createElement('div');row.className='total-row';
+    row.innerHTML=`<span class="cell-index">${index+1}</span>${stars.map(r=>{const v=amountHundred(item.stars?.[r]||0,item.starPrices?.[r]);return`<span class="cell-star" style="color:${v===null?'var(--muted)':COLORS[r]}">${v===null?'—':fmt(v)}</span>`}).join('')}<button class="delete">×</button>`;
+    row.querySelector('button').onclick=()=>deleteItem(item.id);wrap.appendChild(row);
+  });
+  return wrap;
+}
+function renderList(){
+  const count=state.list.length,badge=document.getElementById('listBadge');
+  badge.style.display=count?'inline':'none';badge.textContent=count;
+  document.getElementById('listCount').textContent=count+' 組';
+  const totalsBox=document.getElementById('listTotals');totalsBox.innerHTML='';
+  if(!count)totalsBox.innerHTML='<div class="empty">尚無資料</div>';
+  else{
+    const {byStar,grand}=totals();
+    totalsBox.innerHTML=`<div class="list-total-row"><b>總金額</b><b>${fmt(grand)} 元</b></div>`+
+      Object.keys(byStar).map(Number).sort((a,b)=>a-b).map(r=>`<div class="list-total-row"><span style="color:${COLORS[r]}">${NAMES[r]}</span><span>${fmt(byStar[r])} 柱</span></div>`).join('');
+  }
+  const details=document.getElementById('listDetails');details.innerHTML='';
+  if(!count){details.innerHTML='<div class="empty">尚未加入任何組合</div>';return}
+  state.list.forEach(item=>{
+    const row=document.createElement('div');row.className='list-item';
+    row.innerHTML=`<div class="list-main"><span class="tag ${item.type}">${item.type==='pi'?'立柱':'連碰'}</span><div class="desc">${item.desc}</div><div class="details">${Object.entries(item.stars||{}).map(([r,n])=>{const price=item.starPrices?.[r]||0,amount=amountYuan(n,price);return`<span style="color:${COLORS[r]}">${NAMES[r]}</span> ${n}注${amount===null?'':` × ${price} = ${fmt(amount)}元`}`}).join('<br>')||'缺少明細'}</div></div><button class="delete">×</button>`;
+    row.querySelector('button').onclick=()=>deleteItem(item.id);details.appendChild(row);
+  });
+}
+function deleteItem(id){state.list=state.list.filter(x=>x.id!==id);save();render()}
+function clearAll(){if(!state.list.length)return;if(confirm('確定清除全部清單？')){state.list=[];save();render()}}
+function showStatus(text){const el=document.getElementById('status');el.textContent=text;el.style.display='block';clearTimeout(statusTimer);statusTimer=setTimeout(()=>el.style.display='none',1300)}
+
+function keySignature(e){
+  const parts=[];
+  if(e.ctrlKey)parts.push('Ctrl');
+  if(e.altKey)parts.push('Alt');
+  if(e.shiftKey)parts.push('Shift');
+  if(e.metaKey)parts.push('Meta');
+  parts.push(e.code||e.key);
+  return parts.join('+');
+}
+function shortcutAction(e){
+  const signature=keySignature(e);
+  return Object.keys(state.shortcuts).find(action=>state.shortcuts[action].includes(signature))||null;
+}
+function keyName(signature){
+  const names={
+    Ctrl:'Ctrl',Alt:'Alt',Shift:'Shift',Meta:'Windows',
+    NumLock:'Num Lock',NumpadDivide:'數字鍵盤 ÷',NumpadAdd:'數字鍵盤 +',
+    NumpadEnter:'數字鍵盤 Enter',Enter:'Enter',Tab:'Tab',Backspace:'Backspace',
+    Escape:'Esc',Slash:'/',Equal:'=',Space:'空白鍵'
+  };
+  return signature.split('+').map(part=>{
+    if(names[part])return names[part];
+    if(/^Digit\d$/.test(part))return '主鍵盤 '+part.slice(-1);
+    if(/^Numpad\d$/.test(part))return '數字鍵盤 '+part.slice(-1);
+    if(/^Key[A-Z]$/.test(part))return part.slice(-1);
+    return part;
+  }).join(' + ');
+}
+function renderKeySettings(){
+  const box=document.getElementById('keySettings');
+  if(!box)return;
+  box.innerHTML=Object.entries(SHORTCUT_LABELS).map(([action,label])=>`
+    <div class="key-row">
+      <div class="key-label">${label}</div>
+      <div class="key-bindings">
+        ${state.shortcuts[action].map((key,index)=>`<button class="key-binding" data-action="${action}" data-index="${index}"><span>${keyName(key)}</span><span class="key-remove" data-remove="1" title="移除">×</span></button>`).join('')}
+        <button class="key-add" data-action="${action}" data-add="1">＋ 新增鍵位</button>
+      </div>
+    </div>`).join('');
+}
+function openKeyCapture(action,index){
+  keyCapture={action,index};
+  document.getElementById('keyCaptureTitle').textContent='設定「'+SHORTCUT_LABELS[action]+'」';
+  document.getElementById('keyCapture').classList.add('open');
+}
+function closeKeyCapture(){
+  keyCapture=null;
+  document.getElementById('keyCapture').classList.remove('open');
+}
+function captureKey(e){
+  e.preventDefault();
+  e.stopPropagation();
+  if(['Shift','Control','Alt','Meta'].includes(e.key))return;
+  const signature=keySignature(e);
+  const conflict=Object.entries(state.shortcuts).find(([action,keys])=>
+    keys.some((key,index)=>key===signature&&!(action===keyCapture.action&&index===keyCapture.index))
+  );
+  if(conflict){
+    alert('此按鍵已設定為「'+SHORTCUT_LABELS[conflict[0]]+'」，請先移除或改用其他按鍵。');
+    return;
+  }
+  const keys=state.shortcuts[keyCapture.action];
+  if(keyCapture.index===null)keys.push(signature);
+  else keys[keyCapture.index]=signature;
+  save();
+  closeKeyCapture();
+  renderKeySettings();
+  showStatus('快捷鍵已保存');
+}
+
+function switchPage(page){
+  state.page=page;
+  document.querySelectorAll('.page').forEach(x=>x.classList.toggle('active',x.id==='page-'+page));
+  document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x.dataset.page===page));
+  save();render();
+}
+function render(){
+  if(state.page==='old')renderOld();
+  if(state.page==='new')renderNew();
+  renderList();
+  renderKeySettings();
+}
+function fitTotals(){requestAnimationFrame(()=>document.querySelectorAll('#oldTotal,#newTotal').forEach(el=>{if(!el.classList.contains('collapsed'))el.style.height='auto'}))}
+
+function inputDigit(d){
+  if(state.page==='old'){
+    if(state.old.focus!=='qty')return false;
+    if(state.old.mode==='pair'){
+      const p=state.old.pair;p.buffer=(p.buffer+d).slice(-2);p.count=clamp(p.buffer,0,39,0);
+    }else{
+      const p=state.old.pillar;p.buffer=(p.buffer+d).slice(-2);p.values[p.active]=clamp(p.buffer,0,p.maxValue,0);
+    }
+    save();refreshOldInput();
+    if(state.old.mode==='pillar'&&state.old.pillar.autoAdvance){
+      const p=state.old.pillar;
+      const requiredDigits=p.maxValue<=9?1:2;
+      if(p.buffer.length>=requiredDigits)advanceOldPillar();
+      else focusCurrentQuantity();
+    }
+    return true;
+  }
+  if(state.page==='new'&&state.fresh.focus==='qty'){
+    state.fresh.pending=(state.fresh.pending+d).slice(-2);save();refreshNewInput();return true;
+  }
+  return false;
+}
+function advanceOldPillar(){
+  const p=state.old.pillar;p.buffer='';
+  if(p.active<p.columns-1){
+    p.active++;save();refreshOldInput();
+    document.querySelector('#oldInput .pillar.active')?.focus();
+    return;
+  }
+  const first=Object.keys(starsForPillar(p.values,p.maxStar))[0];
+  if(first){
+    state.old.focus='old-pillar-price-'+first;save();refreshOldInput();
+    document.getElementById(state.old.focus)?.focus();
+  }
+}
+function enterAction(){
+  if(state.page==='old'){
+    if(state.old.focus==='qty'){
+      if(state.old.mode==='pillar'){
+        advanceOldPillar();return;
+      }
+      const first=state.old.mode==='pair'?Object.keys(starsForPair(state.old.pair.count,state.old.pair.maxStar))[0]:Object.keys(starsForPillar(state.old.pillar.values,state.old.pillar.maxStar))[0];
+      if(first){
+        if(state.old.mode==='pair')state.old.pair.buffer='';
+        state.old.focus=(state.old.mode==='pair'?'old-pair-price-':'old-pillar-price-')+first;
+        save();refreshOldInput();document.getElementById(state.old.focus)?.focus();
+      }
+    }else cyclePriceFocus('old');
+    return;
+  }
+  if(state.page==='new'){
+    if(state.fresh.focus==='qty'){
+      if(state.fresh.mode==='pillar'){
+        if(commitFreshPending()){save();refreshNewInput();return}
+        const first=Object.keys(freshStars())[0];
+        if(first){state.fresh.focus='fresh-price-'+first;refreshNewInput();document.getElementById(state.fresh.focus)?.focus()}
+        return;
+      }
+      if(commitFreshPending()){save();refreshNewInput()}
+      const first=Object.keys(freshStars())[0];
+      if(first){state.fresh.focus='fresh-price-'+first;refreshNewInput();document.getElementById(state.fresh.focus)?.focus()}
+    }else cyclePriceFocus('new');
+  }
+}
+function cyclePriceFocus(scope){
+  const prefix=scope==='new'?'fresh-price-':state.old.mode==='pair'?'old-pair-price-':'old-pillar-price-';
+  const current=scope==='new'?state.fresh.focus:state.old.focus;
+  const stars=scope==='new'
+    ? Object.keys(freshStars()).map(Number)
+    : Object.keys(state.old.mode==='pair'?starsForPair(state.old.pair.count,state.old.pair.maxStar):starsForPillar(state.old.pillar.values,state.old.pillar.maxStar)).map(Number);
+  const currentStar=+current.split('-').pop(),index=stars.indexOf(currentStar);
+  if(index>=0&&index<stars.length-1){
+    const id=prefix+stars[index+1];if(scope==='new')state.fresh.focus=id;else state.old.focus=id;document.getElementById(id)?.focus();
+  }else{
+    if(scope==='new'){
+      state.fresh.focus='qty';save();refreshNewInput();
+      document.getElementById('freshDisplay')?.focus();
+    }else{
+      state.old.focus='qty';
+      if(state.old.mode==='pillar')state.old.pillar.active=0;
+      save();refreshOldInput();
+      if(state.old.mode==='pillar')document.querySelector('#oldInput .pillar.active')?.focus();
+      else document.querySelector('#oldInput .number-display')?.focus();
+    }
+  }
+}
+
+document.querySelectorAll('.tab').forEach(tab=>tab.onclick=()=>switchPage(tab.dataset.page));
+document.getElementById('clearAll').onclick=clearAll;
+document.getElementById('cancelKeyCapture').onclick=closeKeyCapture;
+document.getElementById('resetKeys').onclick=()=>{
+  if(!confirm('確定恢復所有預設快捷鍵？'))return;
+  state.shortcuts=clone(DEFAULT_SHORTCUTS);save();renderKeySettings();showStatus('已恢復預設鍵位');
+};
+document.getElementById('keySettings').addEventListener('click',e=>{
+  const button=e.target.closest('button[data-action]');
+  if(!button)return;
+  const action=button.dataset.action;
+  if(e.target.dataset.remove){
+    state.shortcuts[action].splice(Number(button.dataset.index),1);
+    save();renderKeySettings();showStatus('鍵位已移除');return;
+  }
+  openKeyCapture(action,button.dataset.add?null:Number(button.dataset.index));
+});
+document.addEventListener('focusin',e=>{
+  if(e.target.matches('input')&&e.target.value)setTimeout(()=>e.target.select(),0);
+});
+document.addEventListener('keydown',e=>{
+  if(keyCapture){captureKey(e);return}
+  const action=shortcutAction(e);
+  if(action==='clearAll'){if(state.list.length&&confirm('確定清除全部清單？')){state.list=[];save();render()}return}
+  if(action==='submit'&&!e.target.classList.contains('direct')){
+    e.preventDefault();submit(state.page==='new'?'new':state.old.mode==='pair'?'old-pair':'old-pillar');return;
+  }
+  if(e.target.matches('input')){
+    if(action==='next'&&e.target.classList.contains('price')){
+      e.preventDefault();cyclePriceFocus(state.page==='new'?'new':'old');
+    }
+    return;
+  }
+  if(action==='backspace'){
+    e.preventDefault();
+    if(state.page==='new')backspaceFresh();
+    else if(state.page==='old')backspaceOld();
+    return;
+  }
+  if(action==='modePair'){e.preventDefault();if(state.page==='old'){state.old.mode='pair';state.old.focus='qty';renderOld()}else if(state.page==='new')resetFreshMode('pair');return}
+  if(action==='modePillar'){
+    e.preventDefault();
+    if(state.page==='old'){
+      state.old.mode='pillar';state.old.focus='qty';
+      state.old.pillar.active=0;state.old.pillar.buffer='';
+      save();renderOld();focusCurrentQuantity();
+    }else if(state.page==='new')resetFreshMode('pillar');
+    return;
+  }
+  if(action?.startsWith('digit')&&inputDigit(action.slice(-1))){e.preventDefault();return}
+  if(action==='next'){e.preventDefault();enterAction();return}
+});
+
+window.addEventListener('resize',fitTotals);
+state.page=['old','new','list','keys'].includes(state.page)?state.page:'old';
+switchPage(state.page);
+})();
+</script>
+</body>
+</html>

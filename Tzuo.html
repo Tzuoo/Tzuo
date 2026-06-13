@@ -139,17 +139,8 @@ h1{margin:0 0 8px;text-align:center;font-size:16px;color:var(--title)}
 .key-capture-title{font-size:18px;font-weight:800;color:var(--on-control)}
 .key-capture-help{margin:10px 0 18px;color:var(--muted);font-size:13px;line-height:1.7}
 .calculator{width:min(460px,100%);margin:auto;border:1px solid var(--line);border-radius:16px;background:var(--panel);box-shadow:0 8px 28px var(--shadow);overflow:hidden}
-.calc-history{padding:10px 12px;border-bottom:1px solid var(--line);background:var(--panel2)}
-.calc-history-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;font-weight:800}
-.calc-history-clear{padding:5px 10px;border:1px solid var(--line);border-radius:7px;background:var(--button);color:var(--red);font-weight:800}
-.calc-history-list{display:grid;gap:6px}
-.calc-history-empty{padding:8px;color:var(--muted);text-align:center;font-size:calc(12px * var(--font-scale))}
-.calc-history-item{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 10px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--field);font-family:Consolas,monospace}
-.calc-history-index{grid-row:1/3;align-self:center;color:var(--muted);font-size:calc(12px * var(--font-scale));font-weight:800}
-.calc-history-expression{min-width:0;color:var(--muted);font-size:calc(13px * var(--font-scale));overflow-wrap:anywhere}
-.calc-history-result{min-width:0;color:var(--highlight);font-size:calc(18px * var(--font-scale));font-weight:800;overflow-wrap:anywhere}
-.calc-screen{display:grid;grid-template-rows:minmax(calc(30px * var(--font-scale)),auto) minmax(calc(66px * var(--font-scale)),auto);padding:12px 18px;background:var(--field);border-bottom:1px solid var(--line);text-align:right}
-.calc-expression{display:flex;align-items:center;justify-content:flex-end;min-width:0;padding-bottom:7px;border-bottom:1px solid var(--line);color:var(--muted);font-family:Consolas,monospace;font-size:calc(14px * var(--font-scale));line-height:1.35;white-space:nowrap;overflow-x:auto;overflow-y:hidden}
+.calc-screen{padding:12px 18px;background:var(--field);border-bottom:1px solid var(--line);text-align:right}
+.calc-expression{min-height:calc(30px * var(--font-scale));padding-bottom:7px;border-bottom:1px solid var(--line);color:var(--muted);font-family:Consolas,monospace;font-size:calc(14px * var(--font-scale));line-height:1.5;white-space:normal;overflow-wrap:anywhere}
 .calc-display{display:flex;align-items:center;justify-content:flex-end;min-width:0;padding-top:8px;line-height:1.15;white-space:nowrap;overflow-x:auto;overflow-y:hidden;font-family:Consolas,monospace;font-size:calc(38px * var(--font-scale));font-weight:800}
 .calc-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;padding:12px}
 .calc-key{min-height:58px;border:1px solid var(--line);border-radius:10px;background:var(--button);color:var(--on-control);font-size:calc(20px * var(--font-scale));font-weight:800}
@@ -159,7 +150,6 @@ h1{margin:0 0 8px;text-align:center;font-size:16px;color:var(--title)}
 .calc-key.equals{background:var(--accent);border-color:var(--accent);color:#fff}
 .calc-note{padding:0 14px 14px;color:var(--muted);font-size:calc(11px * var(--font-scale));text-align:center}
 [data-theme="light"] .calculator{background:rgba(255,253,249,.92)}
-[data-theme="light"] .calc-history{background:linear-gradient(135deg,#eeeafa,#e8f5f1)}
 [data-theme="light"] .calc-screen{background:linear-gradient(135deg,#fff8ec,#f0edff)}
 [data-theme="light"] .calc-key.operator{background:linear-gradient(135deg,#ece9fa,#e7f3f0)}
 .status{position:fixed;left:50%;top:72px;z-index:3000;transform:translateX(-50%);display:none;padding:8px 14px;border-radius:8px;background:#047857;color:#fff;font-size:13px;font-weight:800}
@@ -229,13 +219,6 @@ h1{font-size:calc(16px * var(--font-scale))}
   </section>
   <section id="page-calc" class="page">
     <div class="calculator">
-      <div class="calc-history">
-        <div class="calc-history-head">
-          <span>計算紀錄</span>
-          <button id="clearCalcHistory" class="calc-history-clear">清除紀錄</button>
-        </div>
-        <div id="calcHistory" class="calc-history-list"></div>
-      </div>
       <div class="calc-screen">
         <div id="calcExpression" class="calc-expression"></div>
         <div id="calcDisplay" class="calc-display">0</div>
@@ -320,7 +303,7 @@ let state=loadState();
 let layout=loadJson(LAYOUT_KEY,{});
 let statusTimer=0;
 let keyCapture=null;
-let calculator={display:'0',stored:null,operator:null,waiting:false,expression:'',history:[]};
+let calculator={display:'0',stored:null,operator:null,waiting:false,expression:'',chain:'',completed:false};
 
 function clone(value){return JSON.parse(JSON.stringify(value));}
 function loadJson(key,fallback){try{return JSON.parse(localStorage.getItem(key)||'null')||fallback}catch{return fallback}}
@@ -666,7 +649,7 @@ function renderOldPair(){
   const p=state.old.pair,wrap=document.createElement('div');
   const controls=document.createElement('div');controls.className='control-row section';
   controls.appendChild(directControl('顯示至',p.maxStar,2,9,v=>{p.maxStar=v;save();renderOld()}));wrap.appendChild(controls);
-  const display=document.createElement('div');display.tabIndex=0;display.className='number-display'+(state.old.focus==='qty'?' focused':'');display.textContent=p.buffer||p.count||'--';display.onclick=()=>{state.old.focus='qty';p.buffer='';refreshOldInput();document.querySelector('#oldInput .number-display')?.focus()};wrap.appendChild(display);
+  const display=document.createElement('div');display.tabIndex=0;display.className='number-display'+(state.old.focus==='qty'?' focused':'');display.textContent=p.buffer||p.count||'--';display.onclick=()=>{state.old.focus='qty';p.buffer='';refreshOldInput();focusWithoutScroll(document.querySelector('#oldInput .number-display'))};wrap.appendChild(display);
   const stars=starsForPair(p.count,p.maxStar);
   wrap.appendChild(summary(stars,'注'));
   const section=document.createElement('div');section.className='section';section.innerHTML='<div class="section-title">各星價格（百元）</div>';section.appendChild(priceEditor(p.prices,stars,'old-pair-price'));wrap.appendChild(section);
@@ -699,7 +682,7 @@ function renderOldCar(){
   wrap.appendChild(cards);
   const label=document.createElement('div');label.className='section-title';label.textContent='化雙選號數（1～39）';wrap.appendChild(label);
   const display=document.createElement('div');display.tabIndex=0;display.className='number-display'+(state.old.focus==='qty'?' focused':'');display.textContent=p.buffer||p.doubleCount||'--';
-  display.onclick=()=>{state.old.focus='qty';p.buffer='';refreshOldInput();document.querySelector('#oldInput .number-display')?.focus()};wrap.appendChild(display);
+  display.onclick=()=>{state.old.focus='qty';p.buffer='';refreshOldInput();focusWithoutScroll(document.querySelector('#oldInput .number-display'))};wrap.appendChild(display);
   const section=document.createElement('div');section.className='section';section.innerHTML='<div class="section-title">車／化雙價格（百元）</div>';
   section.appendChild(carPriceEditor('車','var(--purple)',()=>p.price,value=>p.price=value,'old-car-price',false));
   section.appendChild(carPriceEditor('化雙','var(--green)',()=>p.doublePrice,value=>p.doublePrice=value,'old-double-price',doublesFor(p.doubleCount)===0));wrap.appendChild(section);
@@ -736,7 +719,7 @@ function buildNewBody(){
     body.appendChild(cards);
     const label=document.createElement('div');label.className='section-title';label.textContent='化雙選號數（1～39）';body.appendChild(label);
   }
-  const display=document.createElement('div');display.id='freshDisplay';display.tabIndex=0;display.className='number-display'+(state.fresh.focus==='qty'?' focused':'');display.textContent=freshDisplay();display.onclick=()=>{state.fresh.focus='qty';save();refreshNewInput();document.getElementById('freshDisplay')?.focus()};body.appendChild(display);
+  const display=document.createElement('div');display.id='freshDisplay';display.tabIndex=0;display.className='number-display'+(state.fresh.focus==='qty'?' focused':'');display.textContent=freshDisplay();display.onclick=()=>{state.fresh.focus='qty';save();refreshNewInput();focusWithoutScroll(document.getElementById('freshDisplay'))};body.appendChild(display);
   fitDisplay(display,display.textContent);
   const actions=document.createElement('div');actions.className='actions';
   actions.innerHTML='<button>退一碼</button><button class="danger">清空</button>';
@@ -873,12 +856,18 @@ function backspaceOld(){
   }
   save();refreshOldInput();focusCurrentQuantity();return true;
 }
+function focusWithoutScroll(target){
+  if(!target)return;
+  const left=window.scrollX,top=window.scrollY;
+  try{target.focus({preventScroll:true})}catch{target.focus()}
+  requestAnimationFrame(()=>window.scrollTo(left,top));
+}
 function focusCurrentQuantity(){
   requestAnimationFrame(()=>{
-    if(state.page==='new')document.getElementById('freshDisplay')?.focus();
-    else if(state.page==='old'&&state.old.mode==='pillar')document.querySelector('#oldInput .pillar.active')?.focus();
-    else if(state.page==='old'&&state.old.mode==='car')document.querySelector('#oldInput .number-display')?.focus();
-    else if(state.page==='old')document.querySelector('#oldInput .number-display')?.focus();
+    if(state.page==='new')focusWithoutScroll(document.getElementById('freshDisplay'));
+    else if(state.page==='old'&&state.old.mode==='pillar')focusWithoutScroll(document.querySelector('#oldInput .pillar.active'));
+    else if(state.page==='old'&&state.old.mode==='car')focusWithoutScroll(document.querySelector('#oldInput .number-display'));
+    else if(state.page==='old')focusWithoutScroll(document.querySelector('#oldInput .number-display'));
   });
 }
 
@@ -942,82 +931,90 @@ function calcApply(a,b,operator){
   return b;
 }
 function renderCalculator(){
-  const display=document.getElementById('calcDisplay'),expression=document.getElementById('calcExpression'),history=document.getElementById('calcHistory');
+  const display=document.getElementById('calcDisplay'),expression=document.getElementById('calcExpression');
   display.textContent=calculator.display;
   expression.textContent=calculator.expression||' ';
-  history.innerHTML='';
-  if(!calculator.history.length){
-    history.innerHTML='<div class="calc-history-empty">尚無計算紀錄</div>';
-  }else{
-    calculator.history.slice().reverse().forEach((item,index)=>{
-      const row=document.createElement('div');
-      row.className='calc-history-item';
-      const number=document.createElement('span');
-      number.className='calc-history-index';
-      number.textContent='#'+(calculator.history.length-index);
-      const formula=document.createElement('span');
-      formula.className='calc-history-expression';
-      formula.textContent=item.expression;
-      const result=document.createElement('span');
-      result.className='calc-history-result';
-      result.textContent='＝ '+item.result;
-      row.append(number,formula,result);
-      history.appendChild(row);
-    });
-  }
   const length=calculator.display.length;
   const base=length>18?20:length>14?25:length>10?31:38;
   display.style.fontSize=base*state.fontScale+'px';
-  requestAnimationFrame(()=>{
-    display.scrollLeft=display.scrollWidth;
-    expression.scrollLeft=expression.scrollWidth;
-  });
+  requestAnimationFrame(()=>display.scrollLeft=display.scrollWidth);
 }
 function calcClear(){
-  calculator={...calculator,display:'0',stored:null,operator:null,waiting:false,expression:''};
+  calculator={display:'0',stored:null,operator:null,waiting:false,expression:'',chain:'',completed:false};
   renderCalculator();
 }
-function clearCalcHistory(){
-  if(!calculator.history.length)return;
-  if(!confirm('確定要清除所有計算紀錄嗎？'))return;
-  calculator.history=[];
-  renderCalculator();
+function calcPreview(){
+  if(!calculator.operator||calculator.waiting)return;
+  const current=parseFloat(calculator.display);
+  if(!Number.isFinite(current))return;
+  const result=calcFormat(calcApply(calculator.stored,current,calculator.operator));
+  calculator.expression=`${calculator.chain} ${calcFormat(current)} ＝ ${result}`;
 }
 function calcDigit(digit){
   if(calculator.display==='錯誤')calcClear();
-  if(calculator.waiting){calculator.display=digit;calculator.waiting=false}
+  if(calculator.waiting){
+    if(calculator.completed){
+      calculator={display:digit,stored:null,operator:null,waiting:false,expression:'',chain:'',completed:false};
+      return renderCalculator();
+    }
+    calculator.display=digit;calculator.waiting=false;calculator.completed=false;
+  }
   else calculator.display=calculator.display==='0'?digit:(calculator.display+digit).slice(0,16);
+  calcPreview();
   renderCalculator();
 }
 function calcDecimal(){
   if(calculator.display==='錯誤')calcClear();
-  if(calculator.waiting){calculator.display='0.';calculator.waiting=false}
+  if(calculator.waiting){
+    if(calculator.completed){
+      calculator={display:'0.',stored:null,operator:null,waiting:false,expression:'',chain:'',completed:false};
+      return renderCalculator();
+    }
+    calculator.display='0.';calculator.waiting=false;calculator.completed=false;
+  }
   else if(!calculator.display.includes('.'))calculator.display+='.';
+  calcPreview();
   renderCalculator();
 }
 function calcOperator(operator){
+  const symbol={'+':'＋','-':'−','*':'×','/':'÷'}[operator];
+  if(calculator.completed){
+    calculator.chain+=` ${symbol}`;
+    calculator.expression=calculator.chain;
+    calculator.operator=operator;calculator.waiting=true;calculator.completed=false;calculator.display='0';
+    return renderCalculator();
+  }
+  if(calculator.operator&&calculator.waiting){
+    calculator.operator=operator;
+    calculator.chain=calculator.chain.replace(/[＋−×÷]\s*$/u,symbol);
+    calculator.expression=calculator.chain;
+    return renderCalculator();
+  }
   const current=parseFloat(calculator.display);
   if(!Number.isFinite(current))return calcClear();
   if(calculator.operator&&!calculator.waiting){
     const result=calcApply(calculator.stored,current,calculator.operator);
-    calculator.display=calcFormat(result);
     calculator.stored=result;
-  }else calculator.stored=current;
-  if(calculator.display==='錯誤')return renderCalculator();
-  calculator.operator=operator;calculator.waiting=true;
-  calculator.expression=calculator.display+' '+({'+':'＋','-':'−','*':'×','/':'÷'}[operator]);
+    calculator.chain+=` ${calcFormat(current)} ${symbol}`;
+  }else{
+    calculator.stored=current;
+    calculator.chain=`${calcFormat(current)} ${symbol}`;
+  }
+  if(!Number.isFinite(calculator.stored))return calcClear();
+  calculator.display='0';
+  calculator.expression=calculator.chain;
+  calculator.operator=operator;calculator.waiting=true;calculator.completed=false;
   renderCalculator();
 }
 function calcEquals(){
-  if(!calculator.operator)return;
+  if(!calculator.operator||calculator.waiting)return;
   const current=parseFloat(calculator.display),previous=calculator.stored,operator=calculator.operator;
   const result=calcApply(previous,current,operator);
-  const formula=`${calcFormat(previous)} ${{'+':'＋','-':'−','*':'×','/':'÷'}[operator]} ${calcFormat(current)}`;
-  calculator.expression=formula+' ＝';
-  calculator.display=calcFormat(result);
-  calculator.history.push({expression:formula,result:calculator.display});
-  if(calculator.history.length>100)calculator.history.shift();
-  calculator.stored=null;calculator.operator=null;calculator.waiting=true;
+  const formatted=calcFormat(result);
+  calculator.chain+=` ${calcFormat(current)}`;
+  calculator.expression=`${calculator.chain} ＝ ${formatted}`;
+  calculator.display='0';
+  calculator.stored=result;calculator.operator=null;calculator.waiting=true;calculator.completed=true;
   renderCalculator();
 }
 function calcAction(action,value){
@@ -1028,13 +1025,13 @@ function calcAction(action,value){
   else if(action==='clear')calcClear();
   else if(action==='backspace'){
     if(calculator.waiting||calculator.display==='錯誤')return;
-    calculator.display=calculator.display.length>1?calculator.display.slice(0,-1):'0';renderCalculator();
+    calculator.display=calculator.display.length>1?calculator.display.slice(0,-1):'0';calcPreview();renderCalculator();
   }else if(action==='sign'){
     if(calculator.display!=='0'&&calculator.display!=='錯誤')calculator.display=calculator.display.startsWith('-')?calculator.display.slice(1):'-'+calculator.display;
-    renderCalculator();
+    calcPreview();renderCalculator();
   }else if(action==='percent'){
     if(calculator.display!=='錯誤')calculator.display=calcFormat(parseFloat(calculator.display)/100);
-    renderCalculator();
+    calcPreview();renderCalculator();
   }
 }
 function handleCalculatorKey(e){
@@ -1048,7 +1045,8 @@ function handleCalculatorKey(e){
   if(key==='/'||code==='NumpadDivide'){calcOperator('/');return true}
   if(key==='Enter'||key==='='||code==='NumpadEnter'){calcEquals();return true}
   if(key==='Backspace'){calcAction('backspace');return true}
-  if(key==='Escape'||key==='Delete'){calcClear();return true}
+  if(key==='Escape'){calcClear();return true}
+  if(key==='Delete'){calcClear();return true}
   if(key==='%'){calcAction('percent');return true}
   return false;
 }
@@ -1167,13 +1165,13 @@ function advanceOldColumns(){
   const mode=state.old.mode,p=state.old[mode];p.buffer='';
   if(p.active<p.columns-1){
     p.active++;save();refreshOldInput();
-    document.querySelector('#oldInput .pillar.active')?.focus();
+    focusWithoutScroll(document.querySelector('#oldInput .pillar.active'));
     return;
   }
   const priceId='old-pillar-price-'+Object.keys(starsForPillar(p.values,p.maxStar))[0];
   if(priceId&&!priceId.endsWith('undefined')){
     state.old.focus=priceId;save();refreshOldInput();
-    document.getElementById(state.old.focus)?.focus();
+    focusWithoutScroll(document.getElementById(state.old.focus));
   }
 }
 function enterAction(){
@@ -1183,13 +1181,13 @@ function enterAction(){
         advanceOldColumns();return;
       }
       if(state.old.mode==='car'){
-        state.old.car.buffer='';state.old.focus='old-car-price';save();refreshOldInput();document.getElementById(state.old.focus)?.focus();return;
+        state.old.car.buffer='';state.old.focus='old-car-price';save();refreshOldInput();focusWithoutScroll(document.getElementById(state.old.focus));return;
       }
       const first=Object.keys(starsForPair(state.old.pair.count,state.old.pair.maxStar))[0];
       if(first){
         state.old.pair.buffer='';
         state.old.focus='old-pair-price-'+first;
-        save();refreshOldInput();document.getElementById(state.old.focus)?.focus();
+        save();refreshOldInput();focusWithoutScroll(document.getElementById(state.old.focus));
       }
     }else cyclePriceFocus('old');
     return;
@@ -1199,12 +1197,12 @@ function enterAction(){
       if(state.fresh.mode==='pillar'||state.fresh.mode==='car'){
         if(commitFreshPending()&&state.fresh.mode==='pillar'){save();refreshNewInput();return}
         const priceId=state.fresh.mode==='car'?'fresh-car-price':('fresh-price-'+Object.keys(freshStars())[0]);
-        if(priceId&&!priceId.endsWith('undefined')){state.fresh.focus=priceId;refreshNewInput();document.getElementById(state.fresh.focus)?.focus()}
+        if(priceId&&!priceId.endsWith('undefined')){state.fresh.focus=priceId;refreshNewInput();focusWithoutScroll(document.getElementById(state.fresh.focus))}
         return;
       }
       if(commitFreshPending()){save();refreshNewInput()}
       const first=Object.keys(freshStars())[0];
-      if(first){state.fresh.focus='fresh-price-'+first;refreshNewInput();document.getElementById(state.fresh.focus)?.focus()}
+      if(first){state.fresh.focus='fresh-price-'+first;refreshNewInput();focusWithoutScroll(document.getElementById(state.fresh.focus))}
     }else cyclePriceFocus('new');
   }
 }
@@ -1216,10 +1214,10 @@ function cyclePriceFocus(scope){
     const doubleId=scope==='new'?'fresh-double-price':'old-double-price';
     if(current===carId){
       if(scope==='new')state.fresh.focus=doubleId;else state.old.focus=doubleId;
-      save();document.getElementById(doubleId)?.focus();return;
+      save();focusWithoutScroll(document.getElementById(doubleId));return;
     }
-    if(scope==='new'){state.fresh.focus='qty';save();refreshNewInput();document.getElementById('freshDisplay')?.focus()}
-    else{state.old.focus='qty';save();refreshOldInput();document.querySelector('#oldInput .number-display')?.focus()}
+    if(scope==='new'){state.fresh.focus='qty';save();refreshNewInput();focusWithoutScroll(document.getElementById('freshDisplay'))}
+    else{state.old.focus='qty';save();refreshOldInput();focusWithoutScroll(document.querySelector('#oldInput .number-display'))}
     return;
   }
   const prefix=scope==='new'?'fresh-price-':state.old.mode==='pair'?'old-pair-price-':'old-pillar-price-';
@@ -1229,17 +1227,17 @@ function cyclePriceFocus(scope){
     : Object.keys(state.old.mode==='pair'?starsForPair(state.old.pair.count,state.old.pair.maxStar):starsForPillar(state.old.pillar.values,state.old.pillar.maxStar)).map(Number);
   const currentStar=+current.split('-').pop(),index=stars.indexOf(currentStar);
   if(index>=0&&index<stars.length-1){
-    const id=prefix+stars[index+1];if(scope==='new')state.fresh.focus=id;else state.old.focus=id;document.getElementById(id)?.focus();
+    const id=prefix+stars[index+1];if(scope==='new')state.fresh.focus=id;else state.old.focus=id;focusWithoutScroll(document.getElementById(id));
   }else{
     if(scope==='new'){
       state.fresh.focus='qty';save();refreshNewInput();
-      document.getElementById('freshDisplay')?.focus();
+      focusWithoutScroll(document.getElementById('freshDisplay'));
     }else{
       state.old.focus='qty';
       if(state.old.mode==='pillar')state.old.pillar.active=0;
       save();refreshOldInput();
-      if(state.old.mode==='pillar')document.querySelector('#oldInput .pillar.active')?.focus();
-      else document.querySelector('#oldInput .number-display')?.focus();
+      if(state.old.mode==='pillar')focusWithoutScroll(document.querySelector('#oldInput .pillar.active'));
+      else focusWithoutScroll(document.querySelector('#oldInput .number-display'));
     }
   }
 }
@@ -1254,7 +1252,6 @@ document.getElementById('calcKeys').addEventListener('click',e=>{
   const button=e.target.closest('button[data-calc]');
   if(button)calcAction(button.dataset.calc,button.dataset.value);
 });
-document.getElementById('clearCalcHistory').onclick=clearCalcHistory;
 document.getElementById('cancelKeyCapture').onclick=closeKeyCapture;
 document.getElementById('resetKeys').onclick=()=>{
   if(!confirm('確定恢復所有預設快捷鍵？'))return;

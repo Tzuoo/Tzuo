@@ -301,6 +301,8 @@ const defaults={
 
 let state=loadState();
 let layout=loadJson(LAYOUT_KEY,{});
+delete layout.oldTotal;
+delete layout.newTotal;
 let statusTimer=0;
 let keyCapture=null;
 let calculator={display:'0',stored:null,operator:null,waiting:false,expression:'',chain:'',completed:false};
@@ -456,13 +458,14 @@ function resolveDrag(el,left,top){
 }
 function resolveResize(el,width,height){
   const left=el.offsetLeft,top=el.offsetTop,parent=el.parentElement;
-  width=Math.max(280,Math.min(width,parent.clientWidth-left));height=Math.max(140,height);
+  const minHeight=36+el.querySelector('.panel-body').scrollHeight;
+  width=Math.max(280,Math.min(width,parent.clientWidth-left));height=Math.max(minHeight,height);
   siblingRects(el).forEach(other=>{
     if(!overlaps(panelRect(el,left,top,width,height),other))return;
     if(other.left>=left+280)width=Math.min(width,other.left-left-10);
-    if(other.top>=top+140)height=Math.min(height,other.top-top-10);
+    if(other.top>=top+minHeight)height=Math.min(height,other.top-top-10);
   });
-  return{width:Math.max(280,width),height:Math.max(140,height)};
+  return{width:Math.max(280,width),height:Math.max(minHeight,height)};
 }
 function arrangeWorkspace(workspace){
   if(!workspace)return;
@@ -613,10 +616,7 @@ function setFocus(focus){
 function renderOld(){
   const ws=document.getElementById('oldWorkspace');ws.innerHTML='';
   const body=buildOldBody();
-  ws.appendChild(panel('oldInput','舊版輸入',body,{left:10,top:10,width:540,resizable:true}));
-  const total=document.createElement('div');total.id='oldTotalBody';total.appendChild(buildTotalTable());
-  ws.appendChild(panel('oldTotal','總計',total,{left:10,top:650,width:540,resizable:false,autoHeight:true}));
-  fitTotals();
+  ws.appendChild(panel('oldInput','舊版輸入與總計',body,{left:10,top:10,width:540,resizable:true}));
   ensurePanelFits(document.getElementById('oldInput'));
 }
 function buildOldBody(){
@@ -637,6 +637,7 @@ function buildOldBody(){
   if(state.old.mode==='pair')body.appendChild(renderOldPair());
   else if(state.old.mode==='pillar')body.appendChild(renderOldPillar());
   else body.appendChild(renderOldCar());
+  body.appendChild(buildEmbeddedTotal('oldTotalBody'));
   return body;
 }
 function refreshOldInput(){
@@ -693,10 +694,7 @@ function renderOldCar(){
 function renderNew(){
   const ws=document.getElementById('newWorkspace');ws.innerHTML='';
   const body=buildNewBody();
-  ws.appendChild(panel('newInput','新版組數輸入',body,{left:10,top:10,width:620,resizable:true}));
-  const total=document.createElement('div');total.id='newTotalBody';total.appendChild(buildTotalTable());
-  ws.appendChild(panel('newTotal','新版組數總計',total,{left:10,top:690,width:620,resizable:false,autoHeight:true}));
-  fitTotals();
+  ws.appendChild(panel('newInput','新版組數輸入與總計',body,{left:10,top:10,width:620,resizable:true}));
   ensurePanelFits(document.getElementById('newInput'));
 }
 function buildNewBody(){
@@ -736,6 +734,7 @@ function buildNewBody(){
   }
   body.appendChild(priceSection);
   const note=document.createElement('div');note.className='preview';note.id='freshCompact';note.innerHTML=compactStars(stars);body.appendChild(note);
+  body.appendChild(buildEmbeddedTotal('newTotalBody'));
   return body;
 }
 function refreshNewInput(){
@@ -893,6 +892,18 @@ function buildTotalTable(){
     row.querySelector('button').onclick=()=>deleteItem(item.id);wrap.appendChild(row);
   });
   return wrap;
+}
+function buildEmbeddedTotal(id){
+  const section=document.createElement('div');
+  section.className='section';
+  const title=document.createElement('div');
+  title.className='section-title';
+  title.textContent='總計';
+  const content=document.createElement('div');
+  content.id=id;
+  content.appendChild(buildTotalTable());
+  section.append(title,content);
+  return section;
 }
 function renderList(){
   const count=state.list.length,badge=document.getElementById('listBadge');
@@ -1135,7 +1146,6 @@ function render(){
   renderKeySettings();
   arrangeAllWorkspaces();
 }
-function fitTotals(){requestAnimationFrame(()=>document.querySelectorAll('#oldTotal,#newTotal').forEach(el=>{if(!el.classList.contains('collapsed'))el.style.height='auto'}))}
 
 function inputDigit(d){
   if(state.page==='old'){
@@ -1313,7 +1323,7 @@ document.addEventListener('keydown',e=>{
   if(action==='next'){e.preventDefault();enterAction();return}
 });
 
-window.addEventListener('resize',()=>{fitTotals();arrangeAllWorkspaces()});
+window.addEventListener('resize',arrangeAllWorkspaces);
 state.page=['old','new','list','keys','calc'].includes(state.page)?state.page:'old';
 applyFontScale();
 applyTheme();

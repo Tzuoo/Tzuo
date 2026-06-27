@@ -264,6 +264,10 @@ h1{font-size:calc(16px * var(--font-scale))}
 
 const STATE_KEY='539_clean_v70_final_state';
 const LAYOUT_KEY='539_clean_v70_final_layout';
+const DEVICE_KEY='539_tzuo_device_id_v1';
+const DEVICE_ID=getDeviceId();
+const DEVICE_STATE_KEY=`${STATE_KEY}_${DEVICE_ID}`;
+const DEVICE_LAYOUT_KEY=`${LAYOUT_KEY}_${DEVICE_ID}`;
 const LEGACY_KEY='539appStatePersistent_mobile_v3';
 const LEGACY_NEW_KEY='539_v27_count_only_integrated';
 const COLORS={2:'#60a5fa',3:'#34d399',4:'#fbbf24',5:'#f87171',6:'#c084fc',7:'#38bdf8',8:'#a3e635',9:'#fb923c'};
@@ -300,14 +304,28 @@ const defaults={
 };
 
 let state=loadState();
-let layout=loadJson(LAYOUT_KEY,{});
+let layout=loadJson(DEVICE_LAYOUT_KEY,loadJson(LAYOUT_KEY,{}));
 delete layout.oldTotal;
 delete layout.newTotal;
 let statusTimer=0;
 let keyCapture=null;
 let calculator={display:'0',stored:null,operator:null,waiting:false,expression:'',chain:'',completed:false};
+if(!localStorage.getItem(DEVICE_STATE_KEY))save();
+if(!localStorage.getItem(DEVICE_LAYOUT_KEY))saveLayout();
 
 function clone(value){return JSON.parse(JSON.stringify(value));}
+function randomId(){
+  if(globalThis.crypto?.randomUUID)return globalThis.crypto.randomUUID().replace(/-/g,'').slice(0,16);
+  return Math.random().toString(36).slice(2)+Date.now().toString(36);
+}
+function getDeviceId(){
+  let id=localStorage.getItem(DEVICE_KEY);
+  if(!id){
+    id='dev_'+randomId();
+    localStorage.setItem(DEVICE_KEY,id);
+  }
+  return id;
+}
 function loadJson(key,fallback){try{return JSON.parse(localStorage.getItem(key)||'null')||fallback}catch{return fallback}}
 function cleanNumber(value){
   const text=String(value??'').replace(/,/g,'.').replace(/[^0-9.]/g,'');
@@ -360,8 +378,10 @@ function safeItem(item,index){
 }
 
 function loadState(){
-  const saved=loadJson(STATE_KEY,null);
+  const saved=loadJson(DEVICE_STATE_KEY,null);
   if(saved)return mergeState(saved);
+  const shared=loadJson(STATE_KEY,null);
+  if(shared)return mergeState(shared);
   const next=clone(defaults);
   const legacy=loadJson(LEGACY_KEY,null);
   if(legacy){
@@ -404,8 +424,8 @@ function mergeState(saved){
   out.nextId=Math.max(Number(saved.nextId)||1,...out.list.map(x=>x.id+1));
   return out;
 }
-function save(){localStorage.setItem(STATE_KEY,JSON.stringify(state));}
-function saveLayout(){localStorage.setItem(LAYOUT_KEY,JSON.stringify(layout));}
+function save(){localStorage.setItem(DEVICE_STATE_KEY,JSON.stringify(state));}
+function saveLayout(){localStorage.setItem(DEVICE_LAYOUT_KEY,JSON.stringify(layout));}
 function applyFontScale(){
   state.fontScale=Math.max(.8,Math.min(1.6,Number(state.fontScale)||1));
   document.documentElement.style.setProperty('--font-scale',state.fontScale);

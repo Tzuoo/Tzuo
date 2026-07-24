@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Anime AniSkip Helper
 // @namespace    https://tzuoo.github.io/Tzuo/
-// @version      4.2.5
+// @version      4.3.1
 // @description  Anime1.me 與巴哈姆特動畫瘋共用 AniSkip 片頭片尾跳過
 // @author       tzuoo
 // @match        https://anime1.me/*
@@ -19,6 +19,11 @@
 // @connect      jacoblincool.github.io
 // @connect      jacoblin.cool
 // @connect      raw.githubusercontent.com
+// @connect      ani.gamer.com.tw
+// @connect      api.gamer.com.tw
+// @connect      home.gamer.com.tw
+// @connect      script.google.com
+// @connect      script.googleusercontent.com
 // @updateURL    https://raw.githubusercontent.com/tzuoo/Tzuo/main/Anime1.me.user.js
 // @downloadURL  https://raw.githubusercontent.com/tzuoo/Tzuo/main/Anime1.me.user.js
 // @homepageURL  https://tzuoo.github.io/Tzuo/
@@ -33,6 +38,7 @@
   const SKIP_CACHE_KEY = `${SCRIPT_PREFIX}.skipCache`;
   const ADJUST_KEY = `${SCRIPT_PREFIX}.adjust`;
   const AUTOPLAY_FLAG = `${SCRIPT_PREFIX}.autoplay`;
+  const QUIZ_RECORD_KEY = `${SCRIPT_PREFIX}.gamerQuizRecord`;
   const SKIP_NOTICE_SECONDS = 5;
 
   const defaults = {
@@ -42,6 +48,7 @@
     skipEnabled: true,
     autoplayAfterJump: true,
     jumpWhenEnded: false,
+    autoAnswerGamerQuiz: true,
   };
 
   const adapter = getAdapter();
@@ -98,6 +105,8 @@
   let malResolvePromise = null;
   let malChoicePromise = null;
   let ageAcceptState = { key: "", count: 0, last: 0 };
+  let gamerQuizPromise = null;
+  let gamerQuizWarned = false;
 
   function getSeriesKey() {
     const siteKey = adapter.getSeriesKey() || normalizeTitle(adapter.getTitle()) || location.pathname;
@@ -184,6 +193,172 @@
 
   async function fetchJson(url) {
     return JSON.parse(await requestText(url, "application/json,text/plain,*/*"));
+  }
+
+  function gmRequestJson(method, url, data = null) {
+    return new Promise((resolve, reject) => {
+      if (typeof GM_xmlhttpRequest === "function") {
+        GM_xmlhttpRequest({
+          method,
+          url,
+          data,
+          headers: data ? { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" } : undefined,
+          responseType: "json",
+          timeout: 15000,
+          onload: res => {
+            if (res.status < 200 || res.status >= 300) {
+              reject(new Error(`HTTP ${res.status}`));
+              return;
+            }
+            try {
+              resolve(res.response ?? JSON.parse(res.responseText || "{}"));
+            } catch (err) {
+              reject(err);
+            }
+          },
+          onerror: () => reject(new Error("網路連線失敗")),
+          ontimeout: () => reject(new Error("網路連線逾時")),
+        });
+        return;
+      }
+      fetch(url, {
+        method,
+        credentials: "include",
+        headers: data ? { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" } : undefined,
+        body: data,
+      }).then(res => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      }).then(resolve, reject);
+    });
+  }
+
+  function taipeiDateKey() {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Taipei",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(new Date());
+    const value = type => parts.find(part => part.type === type)?.value || "";
+    return `${value("year")}-${value("month")}-${value("day")}`;
+  }
+
+  function quizErrorMessage(value) {
+    return String(value?.msg || value?.message || value?.error || "");
+  }
+
+  function isQuizAlreadyAnswered(value) {
+    return /已經答過|一天僅限一次|already answered/i.test(quizErrorMessage(value));
+  }
+
+  async function getGamerQuiz() {
+    const result = await gmRequestJson("GET", "https://ani.gamer.com.tw/ajax/animeGetQuestion.php");
+    if (result?.error !== undefined) throw result;
+    if (!result?.token || !result?.question) throw new Error("無法取得動畫瘋每日題目");
+    return result;
+  }
+
+  async function submitGamerQuiz(quiz, answer) {
+    const params = new URLSearchParams({
+      ans: String(answer),
+      token: String(quiz.token),
+      t: String(Date.now()),
+    });
+    const result = await gmRequestJson(
+      "POST",
+      "https://ani.gamer.com.tw/ajax/animeAnsQuestion.php",
+      params.toString()
+    );
+    if (result?.error !== undefined && !isQuizAlreadyAnswered(result)) throw result;
+    return result;
+  }
+
+  function parseQuizAnswer(html) {
+    const doc = new DOMParser().parseFromString(String(html || ""), "text/html");
+    const text = doc.querySelector("#article_content, #home_content, .MSG-list8C")?.textContent || "";
+    const matched = text.match(/[aAＡ]\s*[\.:：、]?\s*([1-4１-４])/);
+    if (!matched) return 0;
+    const normalized = matched[1].replace(/[１-４]/g, ch => String("１２３４".indexOf(ch) + 1));
+    return Number(normalized) || 0;
+  }
+
+  async function answerFromBlackxblue() {
+    const listResult = await gmRequestJson(
+      "GET",
+      "https://api.gamer.com.tw/home/v2/creation_list.php?owner=blackXblue"
+    );
+    const today = taipeiDateKey().slice(5).replace("-", "/");
+    const creation = (listResult?.data?.list || []).find(item => {
+      const match = String(item?.title || "").match(/(\d{1,2})[/-](\d{1,2})/);
+      return match && `${match[1].padStart(2, "0")}/${match[2].padStart(2, "0")}` === today;
+    });
+    if (!creation?.csn) throw new Error("今日解答貼文尚未發布");
+    const html = await requestText(
+      `https://home.gamer.com.tw/artwork.php?sn=${encodeURIComponent(creation.csn)}`,
+      "text/html,*/*"
+    );
+    const answer = parseQuizAnswer(html);
+    if (!answer) throw new Error("今日解答貼文內找不到答案");
+    return answer;
+  }
+
+  async function answerFromQuizCollection(question) {
+    const params = new URLSearchParams({ question: String(question), type: "quiz" });
+    const result = await gmRequestJson(
+      "GET",
+      `https://script.google.com/macros/s/AKfycbxYKwsjq6jB2Oo0xwz4bmkd3-5hdguopA6VJ5KD/exec?${params}`
+    );
+    const answer = Number(result?.data?.answer);
+    if (!result?.success || answer < 1 || answer > 4) throw new Error("題庫查不到答案");
+    return answer;
+  }
+
+  async function ensureGamerQuizAnswered({ quiet = false } = {}) {
+    if (adapter.id !== "gamer" || !config.autoAnswerGamerQuiz) return true;
+    const record = storeGet(QUIZ_RECORD_KEY, {});
+    const today = taipeiDateKey();
+    if (record.date === today && record.done) return true;
+    if (gamerQuizPromise) return gamerQuizPromise;
+
+    gamerQuizPromise = (async () => {
+      let quiz;
+      try {
+        quiz = await getGamerQuiz();
+      } catch (err) {
+        if (isQuizAlreadyAnswered(err)) {
+          storeSet(QUIZ_RECORD_KEY, { date: today, done: true });
+          return true;
+        }
+        if (!quiet) notify(`每日問答檢查失敗：${quizErrorMessage(err) || err}`, 5000);
+        return false;
+      }
+
+      let answer = 0;
+      try {
+        answer = await answerFromBlackxblue();
+      } catch (_) {
+        try { answer = await answerFromQuizCollection(quiz.question); } catch (_) {}
+      }
+      if (!answer) {
+        if (!quiet && !gamerQuizWarned) {
+          gamerQuizWarned = true;
+          alert(`動畫瘋今日題目尚未找到可靠答案，已暫停自動跳集，避免錯過作答。\n\n${quiz.question}`);
+        }
+        return false;
+      }
+
+      try {
+        const result = await submitGamerQuiz(quiz, answer);
+        storeSet(QUIZ_RECORD_KEY, { date: today, done: true, answer });
+        if (!quiet) notify(`動畫瘋每日問答已自動作答（第 ${answer} 項）：${result?.gift || "完成"}`, 5000);
+        return true;
+      } catch (err) {
+        if (!quiet) notify(`每日問答提交失敗：${quizErrorMessage(err) || err}`, 5000);
+        return false;
+      }
+    })().finally(() => { gamerQuizPromise = null; });
+    return gamerQuizPromise;
   }
 
   function decodePercent(value) {
@@ -748,11 +923,12 @@
     setTimeout(() => toast.remove(), ms);
   }
 
-  function goToNext(nextUrl) {
+  async function goToNext(nextUrl) {
     if (!nextUrl) {
       notify("找不到下一集");
       return;
     }
+    if (!await ensureGamerQuizAnswered()) return;
     markAutoplayWanted();
     location.assign(nextUrl);
   }
@@ -1339,6 +1515,7 @@
     const iOutroOffset = mkInput("number", adjust.outroOffset, { min: -120, max: 120, step: 0.5 });
     const iAutoplay = mkInput("checkbox", config.autoplayAfterJump);
     const iJumpEnded = mkInput("checkbox", config.jumpWhenEnded);
+    const iAutoQuiz = mkInput("checkbox", config.autoAnswerGamerQuiz);
 
     const form = document.createElement("form");
     form.append(
@@ -1354,6 +1531,10 @@
       heading("下一集"),
       check("跳集後嘗試自動播放", iAutoplay),
       check("影片自然結束後自動下一集", iJumpEnded)
+    );
+    form.append(
+      heading("動畫瘋每日問答"),
+      check("自動答題（找不到可靠答案時阻止自動跳集）", iAutoQuiz)
     );
 
     const footer = document.createElement("footer");
@@ -1373,6 +1554,7 @@
         skipEnabled: iSkipEnabled.checked,
         autoplayAfterJump: iAutoplay.checked,
         jumpWhenEnded: iJumpEnded.checked,
+        autoAnswerGamerQuiz: iAutoQuiz.checked,
       };
       saveConfig(config);
       saveAdjust({
@@ -1672,5 +1854,6 @@
   wireHotkeys();
   wireAgePrompt();
   wireVideos();
+  ensureGamerQuizAnswered().catch(() => {});
   tryAutoplayIfRequested();
 })();

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Anime AniSkip Helper
 // @namespace    https://tzuoo.github.io/Tzuo/
-// @version      4.3.1
+// @version      4.4.0
 // @description  Anime1.me 與巴哈姆特動畫瘋共用 AniSkip 片頭片尾跳過
 // @author       tzuoo
 // @match        https://anime1.me/*
@@ -110,12 +110,14 @@
 
   function getSeriesKey() {
     const siteKey = adapter.getSeriesKey() || normalizeTitle(adapter.getTitle()) || location.pathname;
-    return `${adapter.id}:${siteKey}`;
+    const season = getActiveSeasonNumber();
+    return `${adapter.id}:${siteKey}${season ? `:season:${season}` : ""}`;
   }
 
   function getSharedTitleKey() {
     const title = normalizeTitle(adapter.getTitle());
-    return title ? `shared:title:${title}` : "";
+    const season = getActiveSeasonNumber();
+    return title ? `shared:title:${title}${season ? `:season:${season}` : ""}` : "";
   }
 
   function getMalCacheEntry(cache) {
@@ -123,6 +125,10 @@
     if (seriesEntry?.id) return seriesEntry;
     const sharedKey = getSharedTitleKey();
     if (sharedKey && cache[sharedKey]?.id) return cache[sharedKey];
+
+    // A single Anime Gamer page can contain multiple MAL seasons. Never reuse
+    // the old page-wide/title-wide entry after a season segment is detected.
+    if (getActiveSeasonNumber()) return null;
 
     const titleKey = normalizeTitle(adapter.getTitle());
     if (!titleKey) return null;
@@ -259,6 +265,22 @@
     return result;
   }
 
+  function getGamerQuizOptions(quiz) {
+    const direct = [1, 2, 3, 4].map(index =>
+      quiz?.[`a${index}`] ?? quiz?.[`ans${index}`] ?? quiz?.[`answer${index}`] ?? ""
+    );
+    if (direct.some(Boolean)) return direct.map(value => String(value || "").trim());
+    const list = Array.isArray(quiz?.options) ? quiz.options : [];
+    return [0, 1, 2, 3].map(index => {
+      const item = list[index];
+      return String(item?.text ?? item?.label ?? item ?? "").trim();
+    });
+  }
+
+  function getGamerQuizAnswerText(quiz, answer) {
+    return getGamerQuizOptions(quiz)[Number(answer) - 1] || "";
+  }
+
   async function submitGamerQuiz(quiz, answer) {
     const params = new URLSearchParams({
       ans: String(answer),
@@ -327,9 +349,15 @@
         quiz = await getGamerQuiz();
       } catch (err) {
         if (isQuizAlreadyAnswered(err)) {
-          storeSet(QUIZ_RECORD_KEY, { date: today, done: true });
+          storeSet(QUIZ_RECORD_KEY, { date: today, done: true, status: "already-answered" });
           return true;
         }
+        storeSet(QUIZ_RECORD_KEY, {
+          date: today,
+          done: false,
+          status: "error",
+          error: quizErrorMessage(err) || String(err),
+        });
         if (!quiet) notify(`每日問答檢查失敗：${quizErrorMessage(err) || err}`, 5000);
         return false;
       }
@@ -341,6 +369,13 @@
         try { answer = await answerFromQuizCollection(quiz.question); } catch (_) {}
       }
       if (!answer) {
+        storeSet(QUIZ_RECORD_KEY, {
+          date: today,
+          done: false,
+          status: "waiting",
+          question: quiz.question,
+          options: getGamerQuizOptions(quiz),
+        });
         if (!quiet && !gamerQuizWarned) {
           gamerQuizWarned = true;
           alert(`動畫瘋今日題目尚未找到可靠答案，已暫停自動跳集，避免錯過作答。\n\n${quiz.question}`);
@@ -350,15 +385,109 @@
 
       try {
         const result = await submitGamerQuiz(quiz, answer);
-        storeSet(QUIZ_RECORD_KEY, { date: today, done: true, answer });
-        if (!quiet) notify(`動畫瘋每日問答已自動作答（第 ${answer} 項）：${result?.gift || "完成"}`, 5000);
+        const options = getGamerQuizOptions(quiz);
+        storeSet(QUIZ_RECORD_KEY, {
+          date: today,
+          done: true,
+          status: "auto-answered",
+          answer,
+          answerText: getGamerQuizAnswerText(quiz, answer),
+          options,
+          gift: result?.gift || "",
+          question: quiz.question,
+        });
+        const answerText = getGamerQuizAnswerText(quiz, answer);
+        if (!quiet) notify(
+          `動畫瘋每日問答已自動作答（第 ${answer} 項${answerText ? `：${answerText}` : ""}）：${result?.gift || "完成"}`,
+          7000
+        );
         return true;
       } catch (err) {
+        storeSet(QUIZ_RECORD_KEY, {
+          date: today,
+          done: false,
+          status: "error",
+          answer,
+          answerText: getGamerQuizAnswerText(quiz, answer),
+          options: getGamerQuizOptions(quiz),
+          question: quiz.question,
+          error: quizErrorMessage(err) || String(err),
+        });
         if (!quiet) notify(`每日問答提交失敗：${quizErrorMessage(err) || err}`, 5000);
         return false;
       }
     })().finally(() => { gamerQuizPromise = null; });
     return gamerQuizPromise;
+  }
+
+  async function getGamerQuizStatus({ refresh = false } = {}) {
+    const today = taipeiDateKey();
+    let record = storeGet(QUIZ_RECORD_KEY, {});
+    if (record.date !== today) record = {};
+    if (record.done || (!refresh && record.status)) return record;
+
+    try {
+      const quiz = await getGamerQuiz();
+      const pending = {
+        date: today,
+        done: false,
+        status: "pending",
+        question: quiz.question,
+        options: getGamerQuizOptions(quiz),
+      };
+      storeSet(QUIZ_RECORD_KEY, pending);
+      return pending;
+    } catch (err) {
+      if (isQuizAlreadyAnswered(err)) {
+        const done = { date: today, done: true, status: "already-answered" };
+        storeSet(QUIZ_RECORD_KEY, done);
+        return done;
+      }
+      return {
+        date: today,
+        done: false,
+        status: "error",
+        error: quizErrorMessage(err) || String(err),
+      };
+    }
+  }
+
+  function describeGamerQuizStatus(record) {
+    const lines = ["動畫瘋每日問答", ""];
+    if (record?.done) {
+      lines.push(record.status === "auto-answered" ? "狀態：✅ 今日已自動作答" : "狀態：✅ 今日已完成");
+      if (record.answer) {
+        lines.push(`正確答案：第 ${record.answer} 項${record.answerText ? `－${record.answerText}` : ""}`);
+      }
+      if (record.gift) lines.push(`獎勵：${record.gift}`);
+      if (record.question) lines.push(`題目：${record.question}`);
+      if (record.options?.some(Boolean)) {
+        lines.push("選項：", ...record.options.map((option, index) => `${index + 1}. ${option}`));
+      }
+      return lines;
+    }
+    if (record?.status === "waiting") {
+      lines.push("狀態：⏳ 尚未找到可靠答案（自動跳集已暫停）");
+    } else if (record?.status === "pending") {
+      lines.push("狀態：⏳ 今日尚未作答");
+    } else {
+      lines.push("狀態：❌ 無法確認或提交失敗");
+    }
+    if (record?.question) lines.push(`題目：${record.question}`);
+    if (record?.options?.some(Boolean)) {
+      lines.push("選項：", ...record.options.map((option, index) => `${index + 1}. ${option}`));
+    }
+    if (record?.answer) {
+      lines.push(`嘗試答案：第 ${record.answer} 項${record.answerText ? `－${record.answerText}` : ""}`);
+    }
+    if (record?.error) lines.push(`原因：${record.error}`);
+    return lines;
+  }
+
+  async function showGamerQuizStatus() {
+    notify("正在查詢動畫瘋每日問答...");
+    const status = await getGamerQuizStatus({ refresh: true });
+    alert(describeGamerQuizStatus(status).join("\n"));
   }
 
   function decodePercent(value) {
@@ -393,6 +522,16 @@
     if (zh) return parseChineseNumber(zh[1]);
     const en = source.match(/(?:season|s)\s*(\d+)/i) || source.match(/(\d+)(?:st|nd|rd|th)\s*season/i);
     return Number(en?.[1]) || 0;
+  }
+
+  function getActiveSeasonNumber() {
+    return Number(adapter.getSeasonNumber?.()) || getSeasonNumber(adapter.getTitle());
+  }
+
+  function getEffectiveTitle() {
+    const title = adapter.getTitle();
+    const season = getActiveSeasonNumber();
+    return season && !getSeasonNumber(title) ? `${title} 第${season}季` : title;
   }
 
   function parseChineseNumber(text) {
@@ -436,7 +575,7 @@
   }
 
   function getSearchQueries() {
-    const title = adapter.getTitle();
+    const title = getEffectiveTitle();
     const strippedSeason = title
       .replace(/\s*第\s*[一二三四五六七八九十\d]+\s*(?:季|期)\s*$/g, "")
       .replace(/\s*(?:Season|S)\s*\d+\s*$/i, "")
@@ -477,7 +616,7 @@
     const episode = adapter.getEpisodeNumber();
     if (episode && Number(item.episodes) >= episode) score += 0.05;
 
-    const wantedSeason = getSeasonNumber();
+    const wantedSeason = getActiveSeasonNumber();
     if (wantedSeason) {
       const haystack = titles.join(" ");
       const seasonMatch =
@@ -1574,20 +1713,19 @@
 
   function describeAniSkipRanges(ranges) {
     if (!ranges?.length) return ["AniSkip: 沒有資料"];
-    const sources = Array.from(new Set(ranges.map(r => r.source).filter(Boolean)));
-    const lines = [sources.length ? `跳過資料: ${sources.join(", ")}` : "AniSkip: 有資料"];
     const intro = ranges.find(r => r.type === "intro");
     const outro = ranges.find(r => r.type === "outro");
-    if (intro) lines.push(`片頭: ${formatTime(intro.start)} -> ${formatTime(intro.end)}`);
-    if (outro) lines.push(`片尾: ${formatTime(outro.start)} -> ${formatTime(outro.end)}`);
-    return lines;
+    const parts = [];
+    if (intro) parts.push(`片頭 ${formatTime(intro.start)}–${formatTime(intro.end)}`);
+    if (outro) parts.push(`片尾 ${formatTime(outro.start)}–${formatTime(outro.end)}`);
+    return [`AniSkip: ${parts.length ? parts.join("｜") : "有資料"}`];
   }
 
   function describeAdjust(adjust) {
-    const lines = [];
-    if (adjust.introOffset) lines.push(`片頭整段偏移: ${adjust.introOffset} 秒`);
-    if (adjust.outroOffset) lines.push(`片尾整段偏移: ${adjust.outroOffset} 秒`);
-    return lines;
+    const parts = [];
+    if (adjust.introOffset) parts.push(`片頭 ${adjust.introOffset > 0 ? "+" : ""}${adjust.introOffset} 秒`);
+    if (adjust.outroOffset) parts.push(`片尾 ${adjust.outroOffset > 0 ? "+" : ""}${adjust.outroOffset} 秒`);
+    return parts.length ? [`時間校正: ${parts.join("｜")}`] : [];
   }
 
   async function showCurrentStatus() {
@@ -1598,16 +1736,18 @@
     const video = adapter.findVideo();
     const duration = Number(video?.duration);
     const episode = adapter.getEpisodeNumber();
+    const season = getActiveSeasonNumber();
+    const displayedEpisode = adapter.getDisplayedEpisodeNumber?.() || 0;
+    const progress = [season ? `第 ${season} 季` : "", episode ? `第 ${episode} 集` : "集數不明"]
+      .filter(Boolean)
+      .join("・");
+    const displayedNote = displayedEpisode && displayedEpisode !== episode ? `（站內第 ${displayedEpisode} 集）` : "";
     const lines = [
       "當前作品",
       "",
-      `站台: ${adapter.name}`,
-      `標題: ${adapter.getTitle() || "無"}`,
-      `集數: ${episode || "無法判斷"}`,
-      `作品 key: ${getSeriesKey()}`,
-      `MAL ID: ${malId || cached?.id || "尚未選擇/解析"}`,
-      `MAL 標題: ${cached?.title || "無"}`,
-      `來源: ${cached?.source || "無"}`,
+      adapter.getTitle() || "標題不明",
+      `${progress}${displayedNote}`,
+      `MAL: ${malId || cached?.id || "未設定"}${cached?.title ? `｜${cached.title}` : ""}`,
     ];
 
     const adjustLines = describeAdjust(loadAdjust());
@@ -1664,6 +1804,7 @@
     if (typeof GM_registerMenuCommand !== "function") return;
     GM_registerMenuCommand("AniSkip 設定", openSettings);
     GM_registerMenuCommand("顯示當前作品狀態", () => showCurrentStatus().catch(err => alert(`查詢失敗：${err.message || err}`)));
+    GM_registerMenuCommand("查看動畫瘋每日問答狀態", () => showGamerQuizStatus().catch(err => alert(`查詢失敗：${err.message || err}`)));
     GM_registerMenuCommand("選擇/切換作品 ID", switchMalCandidate);
     GM_registerMenuCommand("手動輸入作品 ID", inputManualMalId);
   }
@@ -1789,6 +1930,28 @@
         parseEpisodeNumber(document.title);
     }
 
+    function seasonRanges() {
+      const text = document.body?.innerText || "";
+      const ranges = [];
+      const pattern = /第\s*([一二三四五六七八九十\d]+)\s*(?:季|期)\s*[：:]\s*第\s*(\d+)\s*[-–—~～至到]\s*(\d+)\s*集([^※\n]{0,80})/g;
+      let match;
+      while ((match = pattern.exec(text))) {
+        const season = parseChineseNumber(match[1]);
+        const start = Number(match[2]);
+        const end = Number(match[3]);
+        if (season > 0 && start > 0 && end >= start && !ranges.some(item => item.season === season)) {
+          const year = Number((match[4].match(/(20\d{2}|19\d{2})\s*年/) || [])[1]) || 0;
+          ranges.push({ season, start, end, year });
+        }
+      }
+      return ranges;
+    }
+
+    function currentSeasonRange() {
+      const displayed = displayedEpisodeNumber();
+      return seasonRanges().find(item => displayed >= item.start && displayed <= item.end) || null;
+    }
+
     return {
       id: "gamer",
       name: "巴哈姆特動畫瘋",
@@ -1804,12 +1967,20 @@
       },
       getEpisodeNumber() {
         const displayed = displayedEpisodeNumber();
+        const range = currentSeasonRange();
+        if (range) return displayed - range.start + 1;
         const items = episodeItems();
         const currentSn = this.getEpisodeId();
         const relative = relativeEpisodeFromList(items, currentSn, displayed);
         if (relative) return relative;
         if (displayed > 40 && getSeasonNumber(this.getTitle()) > 1) return 0;
         return isRegularEpisodeDisplay(displayed) ? displayed : 0;
+      },
+      getDisplayedEpisodeNumber() {
+        return displayedEpisodeNumber();
+      },
+      getSeasonNumber() {
+        return currentSeasonRange()?.season || 0;
       },
       getEpisodeId() {
         return episodeIdFromUrl();
@@ -1819,6 +1990,8 @@
       },
       getPageYear() {
         const text = document.body?.innerText || "";
+        const seasonalYear = currentSeasonRange()?.year;
+        if (seasonalYear) return seasonalYear;
         const year = Number((text.match(/年份[:：]\s*(20\d{2}|19\d{2})/) || [])[1]);
         return Number.isFinite(year) ? year : 0;
       },

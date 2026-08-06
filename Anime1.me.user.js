@@ -1729,10 +1729,16 @@
   }
 
   async function showCurrentStatus() {
-    notify("正在查詢作品與 AniSkip...");
-    const malId = await resolveMalId();
-    const cache = storeGet(MAL_CACHE_KEY, localReadJson("anime1MalCache", {}));
-    const cached = getMalCacheEntry(cache);
+    notify("正在查詢跳過資料...");
+    const bahaRanges = await loadBahaSkipRanges();
+    let cache = storeGet(MAL_CACHE_KEY, localReadJson("anime1MalCache", {}));
+    let cached = getMalCacheEntry(cache);
+    let malId = cached?.id || 0;
+    if (!bahaRanges.length && !malId) {
+      malId = await resolveMalId();
+      cache = storeGet(MAL_CACHE_KEY, localReadJson("anime1MalCache", {}));
+      cached = getMalCacheEntry(cache);
+    }
     const video = adapter.findVideo();
     const duration = Number(video?.duration);
     const episode = adapter.getEpisodeNumber();
@@ -1747,14 +1753,16 @@
       "",
       adapter.getTitle() || "標題不明",
       `${progress}${displayedNote}`,
-      `MAL: ${malId || cached?.id || "未設定"}${cached?.title ? `｜${cached.title}` : ""}`,
+      ...(bahaRanges.length
+        ? ["資料: Bahamut Anime Skip（不需 MAL）"]
+        : [`MAL: ${malId || cached?.id || "未設定"}${cached?.title ? `｜${cached.title}` : ""}`]),
     ];
 
     const adjustLines = describeAdjust(loadAdjust());
     if (adjustLines.length) lines.push("", ...adjustLines);
     lines.push("");
 
-    if (!malId) {
+    if (!bahaRanges.length && !malId) {
       lines.push("AniSkip: 尚未取得 MAL ID");
     } else if (!episode) {
       lines.push("AniSkip: 無法判斷集數");
@@ -1764,7 +1772,7 @@
       lines.push(`AniSkip: 正片尚未載入或目前是廣告/提示片段（duration=${Number.isFinite(duration) ? duration.toFixed(1) : "未知"}）`);
     } else {
       try {
-        lines.push(...describeAniSkipRanges(await loadSkipRanges(duration)));
+        lines.push(...describeAniSkipRanges(bahaRanges.length ? bahaRanges : await loadSkipRanges(duration)));
       } catch (err) {
         lines.push(String(err?.message || "").includes("404") ? "AniSkip: 沒有資料" : `AniSkip: 查詢失敗 (${err.message || err})`);
       }

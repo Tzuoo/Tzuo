@@ -86,6 +86,9 @@ h1{margin:0 0 8px;text-align:center;font-size:16px;color:var(--title)}
 .price-row{margin-bottom:6px}
 .price-row label{width:45px;font-size:12px;font-weight:700}
 .price{flex:1;min-width:90px;padding:9px;border:1px solid var(--line);border-radius:8px;background:var(--field);color:var(--on-control);text-align:right;font-family:Consolas,monospace}
+.total-multipliers{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+.total-multiplier{display:flex;align-items:center;gap:5px;padding:5px 7px;border:1px solid var(--line);border-radius:8px;background:var(--field)}
+.total-multiplier input{width:62px;padding:5px;border:1px solid var(--line);border-radius:6px;background:var(--panel2);color:var(--yellow);text-align:right;font-family:Consolas,monospace;font-weight:800}
 .price-row.disabled{opacity:.38}
 .price-row.disabled .price{cursor:not-allowed;background:var(--disabled);color:var(--muted)}
 .actions button{flex:1;padding:9px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);color:var(--on-control)}
@@ -282,6 +285,7 @@ const DEFAULT_SHORTCUTS={
 const defaults={
   page:'new',
   list:[],
+  totalMultipliers:{},
   nextId:1,
   fontScale:1,
   theme:'dark',
@@ -329,6 +333,7 @@ function doublesFor(count){
   const n=clamp(count,0,39,0);
   return Math.round(n*(39-n)*(38-n)/2);
 }
+function normalizedMultiplier(value){const n=parseFloat(value);return Number.isFinite(n)?n:1;}
 function amountHundred(count,price){const p=parseFloat(price);return Number.isFinite(p)?count*p:null;}
 function amountYuan(count,price){const h=amountHundred(count,price);return h===null?null:h*100;}
 function fmt(value){return Number(value||0).toLocaleString('en-US',{maximumFractionDigits:8});}
@@ -375,6 +380,7 @@ function mergeState(saved){
   const out=clone(defaults);
   Object.assign(out,saved);
   out.fresh={...defaults.fresh,...saved.fresh,prices:{...defaults.fresh.prices,...saved.fresh?.prices}};
+  out.totalMultipliers=saved.totalMultipliers&&typeof saved.totalMultipliers==='object'?{...saved.totalMultipliers}:{};
   if(!out.fresh.doublePrice&&saved.fresh?.packPrice)out.fresh.doublePrice=saved.fresh.packPrice;
   if(!['single','double'].includes(out.fresh.pillarDigits)){
     out.fresh.pillarDigits=clamp(out.fresh.maxValue,1,99,9)<=9?'single':'double';
@@ -759,12 +765,41 @@ function focusCurrentQuantity(){
 }
 
 function totals(){
-  const byStar={};let grand=0;
+  const rawByStar={},byStar={};let grand=0;
   state.list.forEach(item=>Object.entries(item.stars||{}).forEach(([r,count])=>{
     const value=amountHundred(+count,item.starPrices?.[r]);
-    if(value!==null){byStar[r]=(byStar[r]||0)+value;grand+=value*100}
+    if(value!==null)rawByStar[r]=(rawByStar[r]||0)+value;
   }));
-  return{byStar,grand};
+  Object.entries(rawByStar).forEach(([r,value])=>{
+    byStar[r]=value*normalizedMultiplier(state.totalMultipliers?.[r]);
+    grand+=byStar[r]*100;
+  });
+  return{rawByStar,byStar,grand};
+}
+function buildTotalMultiplierEditor(){
+  const stars=[...new Set(state.list.flatMap(item=>Object.keys(item.stars||{})))].sort(metricSort);
+  const box=document.createElement('div');box.className='total-multipliers';
+  if(!stars.length)return box;
+  stars.forEach(r=>{
+    const control=document.createElement('label');control.className='total-multiplier';
+    control.innerHTML=`<span style="color:${metricColor(r)}">${metricName(r)}</span><span style="color:var(--muted)">×</span><input inputmode="decimal" value="${state.totalMultipliers?.[r]??'1'}" aria-label="${metricName(r)}總額倍率">`;
+    const input=control.querySelector('input');
+    const update=()=>{
+      input.value=cleanNumber(input.value);
+      state.totalMultipliers[r]=input.value;
+      save();refreshTotalDisplays();
+    };
+    input.oninput=update;
+    input.onchange=()=>{if(input.value==='')input.value='1';update()};
+    input.onfocus=()=>setTimeout(()=>input.select(),0);
+    box.appendChild(control);
+  });
+  return box;
+}
+function refreshTotalDisplays(){
+  const host=document.querySelector('#newTotalBody .total-table-host');
+  if(host){host.innerHTML='';host.appendChild(buildTotalTable())}
+  renderList();
 }
 function buildTotalTable(){
   const wrap=document.createElement('div');
@@ -789,7 +824,8 @@ function buildEmbeddedTotal(id){
   title.textContent='總計';
   const content=document.createElement('div');
   content.id=id;
-  content.appendChild(buildTotalTable());
+  content.appendChild(buildTotalMultiplierEditor());
+  const tableHost=document.createElement('div');tableHost.className='total-table-host';tableHost.appendChild(buildTotalTable());content.appendChild(tableHost);
   section.append(title,content);
   return section;
 }
@@ -813,8 +849,8 @@ function renderList(){
     row.querySelector('button').onclick=()=>deleteItem(item.id);details.appendChild(row);
   });
 }
-function deleteItem(id){state.list=state.list.filter(x=>x.id!==id);save();render()}
-function clearAll(){if(!state.list.length)return;if(confirm('確定清除全部清單？')){state.list=[];save();render()}}
+function deleteItem(id){state.list=state.list.filter(x=>x.id!==id);if(!state.list.length)state.totalMultipliers={};save();render()}
+function clearAll(){if(!state.list.length)return;if(confirm('確定清除全部清單？')){state.list=[];state.totalMultipliers={};save();render()}}
 function showStatus(text){const el=document.getElementById('status');el.textContent=text;el.style.display='block';clearTimeout(statusTimer);statusTimer=setTimeout(()=>el.style.display='none',1300)}
 
 function calcFormat(value){
@@ -1130,7 +1166,7 @@ document.addEventListener('keydown',e=>{
   if(keyCapture){captureKey(e);return}
   if(state.page==='calc'&&handleCalculatorKey(e)){e.preventDefault();return}
   const action=shortcutAction(e);
-  if(action==='clearAll'){if(state.list.length&&confirm('確定清除全部清單？')){state.list=[];save();render()}return}
+  if(action==='clearAll'){if(state.list.length&&confirm('確定清除全部清單？')){state.list=[];state.totalMultipliers={};save();render()}return}
   if(action==='submit'&&!e.target.classList.contains('direct')){
     e.preventDefault();submit('new');return;
   }

@@ -790,6 +790,15 @@ function buildTotalMultiplierEditor(){
       save();refreshTotalDisplays();
     };
     input.oninput=update;
+    input.onkeydown=e=>{
+      if(!(e.code==='NumpadDecimal'||e.key==='Decimal'||e.key==='.'||e.key===','))return;
+      e.preventDefault();
+      const start=input.selectionStart??input.value.length,end=input.selectionEnd??start;
+      input.value=cleanNumber(input.value.slice(0,start)+'.'+input.value.slice(end));
+      const caret=Math.min(start+1,input.value.length);
+      input.setSelectionRange(caret,caret);
+      update();
+    };
     input.onchange=()=>{if(input.value==='')input.value='1';update()};
     input.onfocus=()=>setTimeout(()=>input.select(),0);
     box.appendChild(control);

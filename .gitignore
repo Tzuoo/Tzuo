@@ -1,0 +1,17 @@
+.env
+.env.*
+credentials*.json
+secrets*.json
+*.bak
+*.backup
+*.log
+*.tmp
+*.temp
+*.swp
+*~
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+node_modules/
+dist/

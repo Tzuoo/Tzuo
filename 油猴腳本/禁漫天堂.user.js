@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         禁漫天堂
 // @namespace    codex.local
-// @version      5.2.1
+// @version      5.2.2
 // @updateURL    https://raw.githubusercontent.com/Tzuoo/Tzuo/main/%E6%B2%B9%E7%8C%B4%E8%85%B3%E6%9C%AC/%E7%A6%81%E6%BC%AB%E5%A4%A9%E5%A0%82.user.js
 // @downloadURL  https://raw.githubusercontent.com/Tzuoo/Tzuo/main/%E6%B2%B9%E7%8C%B4%E8%85%B3%E6%9C%AC/%E7%A6%81%E6%BC%AB%E5%A4%A9%E5%A0%82.user.js
 // @description  禁漫天堂帳號漫畫收藏書架，保留每部作品最新收藏並自動清理舊集收藏。
@@ -14,7 +14,7 @@
 (() => {
   'use strict';
 
-  const LIBRARY_CACHE_KEY = 'jm-reader-library-cache-v5';
+  const LIBRARY_CACHE_KEY = 'jm-reader-library-cache-v6';
   const LIBRARY_CACHE_TTL = 10 * 60 * 1000;
   const LIBRARY_REFRESH_DELAYS = [1200, 3200];
   const COMPLETED_KEY_PREFIX = 'jm-library-completed-v1:';
@@ -275,7 +275,7 @@
     const seen = new Set();
 
     /*
-     * 同時支援原本版面與可能變動後的收藏頁結構。
+     * 僅讀收藏卡片，禁止退回全頁連結，避免導覽／隨便看混入。
      */
     const albumLinks = [
       ...doc.querySelectorAll(
@@ -283,15 +283,13 @@
       ),
       ...doc.querySelectorAll(
         '.list-col a[href*="/album/"]'
-      ),
-      ...doc.querySelectorAll(
-        'a[href*="/album/"]'
       )
     ].filter(
       (link, index, all) => all.indexOf(link) === index
     );
 
     const items = albumLinks.flatMap((link, index) => {
+      if (link.closest('nav, header, footer, .navbar, .dropdown-menu')) return [];
       const url = new URL(
         link.getAttribute('href'),
         location.origin
@@ -314,6 +312,7 @@
       if (
         !match ||
         !title ||
+        /^(?:隨便看|随便看)$/u.test(title) ||
         seen.has(match[1])
       ) {
         return [];

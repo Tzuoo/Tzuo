@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         禁漫天堂
 // @namespace    codex.local
-// @version      5.2.2
+// @version      5.3.0
 // @updateURL    https://raw.githubusercontent.com/Tzuoo/Tzuo/main/%E6%B2%B9%E7%8C%B4%E8%85%B3%E6%9C%AC/%E7%A6%81%E6%BC%AB%E5%A4%A9%E5%A0%82.user.js
 // @downloadURL  https://raw.githubusercontent.com/Tzuoo/Tzuo/main/%E6%B2%B9%E7%8C%B4%E8%85%B3%E6%9C%AC/%E7%A6%81%E6%BC%AB%E5%A4%A9%E5%A0%82.user.js
 // @description  禁漫天堂帳號漫畫收藏書架，保留每部作品最新收藏並自動清理舊集收藏。
@@ -22,6 +22,8 @@
 
   let libraryLoaded = false;
   let libraryLoading = false;
+  let libraryRemoving = false;
+  let libraryNotice = '';
   let libraryData = { username: '', favorites: [] };
   let libraryCachedAt = 0;
 
@@ -82,6 +84,8 @@
     }
     .jm-library-tabs button[aria-selected="true"] { color:#ffd35a; border-color:#ffd35a; }
     .jm-library-toggle { flex-shrink:0; margin-right:12px; font-size:12px; }
+    .jm-library-remove { color:#ffaaaa; border-color:#805050; }
+    .jm-library-toggle:disabled { opacity:.5; cursor:wait; }
     #jm-library-dialog footer {
       padding:12px 15px; border-top:1px solid #444; text-align:right;
     }
@@ -449,6 +453,7 @@
 
     if (
       libraryLoading ||
+      libraryRemoving ||
       (cacheFresh && !force)
     ) {
       return;
@@ -621,7 +626,8 @@
         libraryLoading
           ? '（背景更新中）'
           : ''
-      );
+      ) + (libraryRemoving ? '（正在移除收藏…）' : '') +
+      (libraryNotice ? ` · ${libraryNotice}` : '');
 
     list.replaceChildren(
       ...items.map(item => {
@@ -658,7 +664,14 @@
             status.textContent = '無法儲存完結標記，請確認瀏覽器允許本機儲存。';
           }
         });
-        row.append(link, toggle);
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'jm-library-toggle jm-library-remove';
+        remove.textContent = '移除收藏';
+        remove.disabled = libraryLoading || libraryRemoving;
+        remove.setAttribute('aria-label', `移除收藏：${item.title}`);
+        remove.addEventListener('click', () => removeLibraryItem(item));
+        row.append(link, toggle, remove);
         return row;
       })
     );
@@ -682,6 +695,37 @@
             libraryData.username
           )}/favorite/albums`
         : '/user/';
+  }
+
+  async function removeLibraryItem(item) {
+    if (libraryLoading || libraryRemoving || !libraryData.username) return;
+    if (!window.confirm(`確定從網站收藏移除這本漫畫？\n\n${item.title}\n\n只移除這一本，不會刪除漫畫內容。`)) return;
+    const username = libraryData.username;
+    libraryRemoving = true;
+    libraryNotice = '';
+    renderLibrary();
+    try {
+      const profile = await fetchDocument('/user/');
+      if (extractUsername(profile) !== username) {
+        throw new Error('登入帳號已改變，請重新整理後再操作');
+      }
+      await removeOfficialFavorite(item.id);
+      libraryData.favorites = libraryData.favorites.filter(book => book.id !== item.id);
+      libraryCachedAt = Date.now();
+      libraryNotice = '已移除收藏';
+      try {
+        localStorage.setItem(LIBRARY_CACHE_KEY, JSON.stringify({ savedAt: libraryCachedAt, data: libraryData }));
+      } catch {
+        libraryCachedAt = 0;
+        try { localStorage.removeItem(LIBRARY_CACHE_KEY); } catch {}
+        libraryNotice = '已移除收藏，但本機快取無法儲存';
+      }
+    } catch (error) {
+      libraryNotice = `移除失敗：${error?.message || String(error)}`;
+    } finally {
+      libraryRemoving = false;
+      renderLibrary();
+    }
   }
 
   function openLibrary() {

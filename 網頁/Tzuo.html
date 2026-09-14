@@ -79,6 +79,8 @@ h1{margin:0 0 8px;text-align:center;font-size:16px;color:var(--title)}
 .direct{width:36px;border:0;outline:0;background:transparent;color:var(--blue);text-align:center;font-weight:800}
 .number-display{width:100%;min-height:78px;padding:12px;border:2px solid var(--line);border-radius:12px;background:var(--field);display:flex;align-items:center;justify-content:center;text-align:center;font-family:Consolas,monospace;font-size:48px;font-weight:800;line-height:1.16;overflow-wrap:anywhere;word-break:break-word}
 .number-display.focused{border-color:var(--yellow);box-shadow:0 0 0 3px rgba(251,191,36,.14)}
+.number-display{position:relative;color:var(--text)}
+.quantity-input{position:absolute;inset:0;width:100%;height:100%;border:0;outline:0;background:transparent;color:transparent;caret-color:transparent;font-size:16px;opacity:1}
 .pillar-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin:8px 0}
 .pillar{min-height:52px;border:2px solid var(--line);border-radius:9px;background:var(--field);color:var(--on-control);font-family:Consolas,monospace;font-size:21px;font-weight:800}
 .pillar.active{border-color:var(--yellow)}
@@ -651,11 +653,24 @@ function buildNewBody(){
     body.appendChild(cards);
     const label=document.createElement('div');label.className='section-title';label.textContent='化雙選號數（1～39）';body.appendChild(label);
   }
-  const display=document.createElement('div');display.id='freshDisplay';display.tabIndex=0;display.className='number-display'+(state.fresh.focus==='qty'?' focused':'');display.textContent=freshDisplay();display.onclick=()=>{state.fresh.focus='qty';save();refreshNewInput();focusWithoutScroll(document.getElementById('freshDisplay'))};body.appendChild(display);
-  fitDisplay(display,display.textContent);
+  const display=document.createElement('div');display.id='freshDisplay';display.className='number-display'+(state.fresh.focus==='qty'?' focused':'');
+  const text=document.createElement('span');text.textContent=freshDisplay();display.appendChild(text);
+  const input=document.createElement('input');input.className='quantity-input';input.type='text';input.inputMode='numeric';input.autocomplete='off';input.setAttribute('aria-label','組數輸入');input.setAttribute('enterkeyhint','next');
+  input.onfocus=()=>{setFocus('qty');save()};
+  const consume=()=>{
+    const digits=input.value.replace(/[０-９]/g,c=>String(c.charCodeAt(0)-0xff10)).replace(/\D/g,'');
+    input.value='';
+    for(const digit of digits)inputDigit(digit);
+  };
+  input.oninput=e=>{if(!e.isComposing)consume()};
+  input.oncompositionend=consume;
+  input.onbeforeinput=e=>{if(e.inputType==='deleteContentBackward'){e.preventDefault();backspaceFresh()}};
+  display.appendChild(input);body.appendChild(display);
+  fitDisplay(display,text.textContent);
   const actions=document.createElement('div');actions.className='actions';
-  actions.innerHTML='<button>退一碼</button><button class="danger">清空</button>';
+  actions.innerHTML='<button>退一碼</button><button class="danger">清空</button><button>確認／下一欄</button><button class="primary">＋ 加入清單</button>';
   actions.children[0].onclick=()=>backspaceFresh();actions.children[1].onclick=()=>clearInput('new');body.appendChild(actions);
+  actions.children[2].onclick=enterAction;actions.children[3].onclick=()=>submit('new');
   const stars=freshPriceStars();
   const priceSection=document.createElement('div');priceSection.className='section';
   if(state.fresh.mode==='car'){
@@ -674,7 +689,25 @@ function buildNewBody(){
 function refreshNewInput(){
   const panelEl=document.getElementById('newInput');
   if(!panelEl){renderNew();return}
-  const body=panelEl.querySelector('.panel-body');body.innerHTML='';body.appendChild(buildNewBody());
+  const display=document.getElementById('freshDisplay');
+  const keepInput=display?.contains(document.activeElement);
+  const host=panelEl.querySelector('.panel-body'),body=host.firstElementChild,next=buildNewBody();
+  if(keepInput){
+    const replacement=next.querySelector('#freshDisplay');
+    display.querySelector('span').textContent=freshDisplay();
+    display.classList.toggle('focused',state.fresh.focus==='qty');
+    fitDisplay(display,freshDisplay());
+    // 保留已聚焦欄位在 DOM 中，避免每打一碼就關閉手機鍵盤。
+    [...body.children].filter(child=>child!==display).forEach(child=>child.remove());
+    let afterDisplay=false;
+    [...next.children].forEach(child=>{
+      if(child===replacement){afterDisplay=true;return}
+      if(afterDisplay)body.appendChild(child);else body.insertBefore(child,display);
+    });
+    body.className=next.className;
+  }else{
+    host.replaceChildren(next);
+  }
   ensurePanelFits(panelEl);
 }
 function resetFreshMode(mode){state.fresh.mode=mode;state.fresh.pending='';state.fresh.pair=null;state.fresh.columns=[];state.fresh.doubleCount=null;state.fresh.focus='qty';save();refreshNewInput()}
@@ -754,6 +787,7 @@ function backspaceFresh(){
 }
 function focusWithoutScroll(target){
   if(!target)return;
+  if(target.id==='freshDisplay')target=target.querySelector('input');
   const left=window.scrollX,top=window.scrollY;
   try{target.focus({preventScroll:true})}catch{target.focus()}
   requestAnimationFrame(()=>window.scrollTo(left,top));
@@ -1169,9 +1203,10 @@ document.getElementById('keySettings').addEventListener('click',e=>{
   openKeyCapture(action,button.dataset.add?null:Number(button.dataset.index));
 });
 document.addEventListener('focusin',e=>{
-  if(e.target.matches('input')&&e.target.value)setTimeout(()=>e.target.select(),0);
+  if(e.target.matches('input:not(.quantity-input)')&&e.target.value)setTimeout(()=>e.target.select(),0);
 });
 document.addEventListener('keydown',e=>{
+  if(e.isComposing||e.keyCode===229)return;
   if(keyCapture){captureKey(e);return}
   if(state.page==='calc'&&handleCalculatorKey(e)){e.preventDefault();return}
   const action=shortcutAction(e);
@@ -1179,7 +1214,7 @@ document.addEventListener('keydown',e=>{
   if(action==='submit'&&!e.target.classList.contains('direct')){
     e.preventDefault();submit('new');return;
   }
-  if(e.target.matches('input')){
+  if(e.target.matches('input:not(.quantity-input)')){
     if(action==='next'&&e.target.classList.contains('price')){
       e.preventDefault();cyclePriceFocus();
     }
@@ -1202,7 +1237,7 @@ document.addEventListener('keydown',e=>{
     return;
   }
   if(action?.startsWith('digit')&&inputDigit(action.slice(-1))){e.preventDefault();return}
-  if(action==='next'){e.preventDefault();enterAction();return}
+  if(action==='next'||(e.target.classList.contains('quantity-input')&&e.key==='Enter')){e.preventDefault();enterAction();return}
 });
 
 window.addEventListener('resize',arrangeAllWorkspaces);

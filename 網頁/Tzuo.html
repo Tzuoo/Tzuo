@@ -162,22 +162,6 @@ h1{margin:0 0 8px;text-align:center;font-size:16px;color:var(--title)}
 [data-theme="light"] .calc-screen{background:linear-gradient(135deg,#fff8ec,#f0edff)}
 [data-theme="light"] .calc-key.operator{background:linear-gradient(135deg,#ece9fa,#e7f3f0)}
 .status{position:fixed;left:50%;top:72px;z-index:3000;transform:translateX(-50%);display:none;padding:8px 14px;border-radius:8px;background:#047857;color:#fff;font-size:13px;font-weight:800}
-.quick-summary{display:none}
-@media(max-width:900px),(hover:none) and (pointer:coarse){
-  .quick-summary:not([hidden]){display:block;margin:8px 0;padding:8px;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
-  .quick-modes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;margin-bottom:7px}
-  .quick-modes button{padding:8px 4px;border:1px solid var(--line);border-radius:7px;background:var(--button);color:var(--muted);font-weight:800;font-size:14px}
-  .quick-modes button.active{border:2px solid var(--yellow);padding:7px 3px;background:var(--panel2);color:var(--yellow);box-shadow:0 0 0 2px rgba(251,191,36,.12)}
-  .quick-current{display:flex;align-items:center;gap:8px;min-width:0;margin-bottom:6px;font-size:14px}
-  .quick-mode{flex:none;padding:3px 8px;border-radius:6px;background:var(--panel2);color:var(--yellow);font-weight:800}
-  .quick-input{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:Consolas,monospace;font-weight:800}
-  .quick-grand{margin-left:auto;flex:none;text-align:right;font-size:12px;color:var(--muted)}
-  .quick-grand strong{display:block;color:var(--highlight);font-size:16px}
-  .quick-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px}
-  .quick-metric{display:flex;justify-content:space-between;gap:4px;padding:4px 6px;background:var(--field);border-radius:5px;font-size:12px;min-width:0}
-  .quick-metric strong{overflow-wrap:anywhere;font-family:Consolas,monospace}
-  .quick-unit{color:var(--muted);font-size:10px;margin-top:4px}
-}
 h1{font-size:calc(16px * var(--font-scale))}
 .tab,.display-tools,.mode-btn,.actions button,.key-binding,.key-add,.key-capture-help{font-size:calc(14px * var(--font-scale))}
 .panel-title,.section-title,.preview,.price-row label,.details,.empty,.key-intro,.card-title{font-size:calc(12px * var(--font-scale))}
@@ -224,12 +208,6 @@ h1{font-size:calc(16px * var(--font-scale))}
     <button class="tab" data-page="keys">快捷鍵</button>
     <button class="tab" data-page="calc">計算機</button>
   </div>
-  <aside id="quickSummary" class="quick-summary" aria-label="目前輸入與已加入清單總計" hidden>
-    <div class="quick-modes" aria-label="固定模式切換"><button data-quick-mode="pair" aria-label="切換連碰">連碰</button><button data-quick-mode="pillar" aria-label="切換立柱">立柱</button><button data-quick-mode="car" aria-label="切換車">車</button></div>
-    <div class="quick-current"><span id="quickMode" class="quick-mode"></span><span id="quickInput" class="quick-input"></span><div class="quick-grand">清單總金額<strong id="quickGrand"></strong></div></div>
-    <div id="quickMetrics" class="quick-metrics"></div>
-    <div class="quick-unit">合計單位：百元（與下方「合」相同，不含尚未加入清單的輸入）</div>
-  </aside>
 </header>
 
 <main>
@@ -434,7 +412,7 @@ function mergeState(saved){
   out.nextId=Math.max(Number(saved.nextId)||1,...out.list.map(x=>x.id+1));
   return out;
 }
-function save(){localStorage.setItem(STATE_KEY,JSON.stringify(state));renderQuickSummary();}
+function save(){localStorage.setItem(STATE_KEY,JSON.stringify(state));}
 function saveLayout(){localStorage.setItem(LAYOUT_KEY,JSON.stringify(layout));}
 function applyFontScale(){
   state.fontScale=Math.max(.8,Math.min(1.6,Number(state.fontScale)||1));
@@ -893,28 +871,6 @@ function totals(){
   });
   return{rawByStar,byStar,grand};
 }
-function renderQuickSummary(){
-  const box=document.getElementById('quickSummary');
-  box.hidden=state.page!=='new';
-  const mode={pair:'連碰',pillar:'立柱',car:'車'}[state.fresh.mode];
-  document.getElementById('quickMode').textContent=mode;
-  document.querySelectorAll('[data-quick-mode]').forEach(button=>{
-    const active=button.dataset.quickMode===state.fresh.mode;
-    button.classList.toggle('active',active);button.setAttribute('aria-pressed',String(active));
-  });
-  const input=document.getElementById('quickInput');
-  input.textContent=(state.fresh.mode==='car'?'化雙選號 ':'')+freshDisplay();input.title=input.textContent;
-  const {byStar,grand}=totals();
-  document.getElementById('quickGrand').textContent=fmt(grand)+' 元';
-  const metrics=document.getElementById('quickMetrics');metrics.replaceChildren();
-  const keys=[...new Set(['2','3','4',...state.list.flatMap(item=>Object.keys(item.stars||{}))])].sort(metricSort);
-  keys.forEach(key=>{
-    const cell=document.createElement('div');cell.className='quick-metric';cell.style.color=metricColor(key);
-    const label=document.createElement('span');label.textContent=metricName(key);
-    const value=document.createElement('strong');value.textContent=fmt(byStar[key]||0);
-    cell.append(label,value);metrics.appendChild(cell);
-  });
-}
 function buildTotalMultiplierEditor(){
   const stars=[...new Set(state.list.flatMap(item=>Object.keys(item.stars||{})))].sort(metricSort);
   const box=document.createElement('div');box.className='total-multipliers';
@@ -1292,7 +1248,6 @@ document.getElementById('fontUp').onclick=()=>changeFontScale(.1);
 document.getElementById('fontReset').onclick=()=>{state.fontScale=1;applyFontScale();save();render();showStatus('字體已恢復 100%')};
 document.getElementById('themeToggle').onclick=toggleTheme;
 document.getElementById('keyboardToggle').onclick=()=>setKeyboardMode(!state.externalKeyboard);
-document.querySelectorAll('[data-quick-mode]').forEach(button=>button.onclick=()=>resetFreshMode(button.dataset.quickMode));
 document.getElementById('calcKeys').addEventListener('click',e=>{
   const button=e.target.closest('button[data-calc]');
   if(button)calcAction(button.dataset.calc,button.dataset.value);

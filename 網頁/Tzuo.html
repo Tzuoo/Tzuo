@@ -58,7 +58,7 @@ h1{margin:0 0 8px;text-align:center;font-size:16px;color:var(--title)}
 .badge{display:none;margin-left:4px;padding:1px 6px;border-radius:8px;background:var(--accent);color:#fff;font-size:10px}
 .page{display:none;padding:10px 10px 80px}
 .page.active{display:block}
-.workspace{position:relative;min-height:1050px}
+.workspace{position:relative;min-height:1050px;overflow-anchor:none}
 .panel{position:absolute;background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:0 4px 18px var(--shadow);min-width:280px;overflow:hidden}
 .panel-head{height:36px;padding:0 10px;background:var(--panel2);border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;cursor:grab;touch-action:none;user-select:none}
 .panel-title{font-size:12px;font-weight:800;letter-spacing:1px;color:var(--panel-title)}
@@ -175,6 +175,10 @@ h1{font-size:calc(16px * var(--font-scale))}
   .calc-cards{grid-template-columns:1fr}
 }
 @media(max-width:1024px),(hover:none) and (pointer:coarse){
+  .total-multipliers{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px}
+  .total-multiplier{min-width:0;gap:3px;padding:4px}
+  .total-multiplier span{flex:none;white-space:nowrap}
+  .total-multiplier input{flex:1;width:0;min-width:0;padding:5px 3px}
   input,.direct,.price{
     font-size:max(16px,calc(14px * var(--font-scale)))!important;
     touch-action:manipulation;
@@ -304,6 +308,8 @@ delete layout.oldTotal;
 delete layout.newTotal;
 let statusTimer=0;
 let keyCapture=null;
+let manualScrollVersion=0;
+let inputPointerPosition=null;
 let calculator={display:'0',stored:null,operator:null,waiting:false,expression:'',chain:'',completed:false};
 
 function clone(value){return JSON.parse(JSON.stringify(value));}
@@ -464,6 +470,7 @@ function resolveResize(el,width,height){
 }
 function arrangeWorkspace(workspace){
   if(!workspace)return;
+  restoreViewportAfterUpdate();
   const panels=[...workspace.querySelectorAll('.panel')];
   panels.forEach((el,index)=>{
     for(let i=0;i<index;i++){
@@ -687,6 +694,7 @@ function buildNewBody(){
   return body;
 }
 function refreshNewInput(){
+  restoreViewportAfterUpdate();
   const panelEl=document.getElementById('newInput');
   if(!panelEl){renderNew();return}
   const display=document.getElementById('freshDisplay');
@@ -785,12 +793,16 @@ function backspaceFresh(){
   else if(f.mode==='car'&&f.doubleCount)f.doubleCount=+String(f.doubleCount).slice(0,-1)||null;
   save();refreshNewInput();
 }
+function restoreViewportAfterUpdate(position={left:window.scrollX,top:window.scrollY}){
+  const version=manualScrollVersion;
+  const restore=()=>{if(version===manualScrollVersion)window.scrollTo(position.left,position.top)};
+  requestAnimationFrame(()=>{restore();requestAnimationFrame(restore)});
+}
 function focusWithoutScroll(target){
   if(!target)return;
   if(target.id==='freshDisplay')target=target.querySelector('input');
-  const left=window.scrollX,top=window.scrollY;
+  restoreViewportAfterUpdate();
   try{target.focus({preventScroll:true})}catch{target.focus()}
-  requestAnimationFrame(()=>window.scrollTo(left,top));
 }
 function focusCurrentQuantity(){
   requestAnimationFrame(()=>{
@@ -840,6 +852,7 @@ function buildTotalMultiplierEditor(){
   return box;
 }
 function refreshTotalDisplays(){
+  restoreViewportAfterUpdate();
   const host=document.querySelector('#newTotalBody .total-table-host');
   if(host){host.innerHTML='';host.appendChild(buildTotalTable())}
   renderList();
@@ -1107,6 +1120,7 @@ function switchPage(page){
   save();render();
 }
 function render(){
+  if(state.page==='new')restoreViewportAfterUpdate();
   if(state.page==='new')renderNew();
   renderList();
   renderKeySettings();
@@ -1202,10 +1216,21 @@ document.getElementById('keySettings').addEventListener('click',e=>{
   }
   openKeyCapture(action,button.dataset.add?null:Number(button.dataset.index));
 });
+// 只抵銷輸入與重排引發的自動捲動；使用者主動滑動即取消還原。
+document.addEventListener('touchmove',()=>{manualScrollVersion++},{passive:true});
+document.addEventListener('wheel',()=>{manualScrollVersion++},{passive:true});
+document.addEventListener('pointerdown',e=>{
+  manualScrollVersion++;
+  inputPointerPosition=e.target.matches('input')?{target:e.target,left:window.scrollX,top:window.scrollY,time:performance.now()}:null;
+},{passive:true});
 document.addEventListener('focusin',e=>{
+  if(inputPointerPosition?.target===e.target&&performance.now()-inputPointerPosition.time<1000){
+    restoreViewportAfterUpdate(inputPointerPosition);inputPointerPosition=null;
+  }
   if(e.target.matches('input:not(.quantity-input)')&&e.target.value)setTimeout(()=>e.target.select(),0);
 });
 document.addEventListener('keydown',e=>{
+  if(!e.target.matches('input')&&['PageUp','PageDown','Home','End','ArrowUp','ArrowDown',' '].includes(e.key))manualScrollVersion++;
   if(e.isComposing||e.keyCode===229)return;
   if(keyCapture){captureKey(e);return}
   if(state.page==='calc'&&handleCalculatorKey(e)){e.preventDefault();return}

@@ -45,12 +45,16 @@
 [data-theme="light"] .key-add{box-shadow:0 2px 5px rgba(74,65,105,.08)}
 *{box-sizing:border-box}
 html,body{margin:0;min-height:100%;background:var(--bg);color:var(--text);font-family:"Microsoft JhengHei","Noto Sans TC",sans-serif;-webkit-text-size-adjust:100%;text-size-adjust:100%}
+html{height:100%;overflow:hidden}
+body{position:fixed;inset:0;display:flex;flex-direction:column;overflow:hidden}
+header{flex:none}
+main{flex:1;min-height:0;overflow:auto;overflow-anchor:none;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
 button,input{font:inherit}
 button{cursor:pointer}
 header{position:sticky;top:0;z-index:1000;background:var(--header);border-bottom:1px solid var(--line);padding:10px 12px 0}
 h1{margin:0 0 8px;text-align:center;font-size:16px;color:var(--title)}
 .tabs{display:flex;justify-content:center;gap:5px;flex-wrap:wrap}
-.display-tools{display:flex;justify-content:center;align-items:center;gap:6px;padding:0 0 7px}
+.display-tools{display:flex;justify-content:center;align-items:center;flex-wrap:wrap;gap:6px;padding:0 0 7px}
 .display-tools button{min-width:38px;padding:5px 9px;border:1px solid var(--line);border-radius:7px;background:var(--panel2);color:var(--on-control);font-weight:800}
 .display-tools .font-value{min-width:58px;color:var(--highlight);text-align:center;font-weight:800}
 .tab{padding:8px 18px;border:1px solid transparent;border-bottom:0;border-radius:8px 8px 0 0;background:transparent;color:var(--muted)}
@@ -196,6 +200,7 @@ h1{font-size:calc(16px * var(--font-scale))}
     <button id="fontUp" title="放大字體">A＋</button>
     <button id="fontReset" title="恢復預設字體">重設</button>
     <button id="themeToggle" title="切換深淺色模式">淺色</button>
+    <button id="keyboardToggle" title="切換手機或外接鍵盤模式">手機鍵盤</button>
   </div>
   <div class="tabs">
     <button class="tab active" data-page="new">組數</button>
@@ -295,6 +300,7 @@ const defaults={
   nextId:1,
   fontScale:1,
   theme:'dark',
+  externalKeyboard:false,
   shortcutVersion:2,
   shortcuts:DEFAULT_SHORTCUTS,
   fresh:{
@@ -308,8 +314,9 @@ delete layout.oldTotal;
 delete layout.newTotal;
 let statusTimer=0;
 let keyCapture=null;
-let manualScrollVersion=0;
-let inputPointerPosition=null;
+const scroller=document.querySelector('main');
+let manualScrolling=false;
+let savedScroll={left:0,top:0};
 let calculator={display:'0',stored:null,operator:null,waiting:false,expression:'',chain:'',completed:false};
 
 function clone(value){return JSON.parse(JSON.stringify(value));}
@@ -563,7 +570,7 @@ function directControl(label,value,min,max,onCommit){
   plus.onclick=()=>{input.value=String(clamp(+input.value+1,min,max,value));commit()};
   input.oninput=()=>{input.value=input.value.replace(/\D/g,'').slice(0,2)};
   input.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();commit();input.blur()}};
-  input.onchange=commit;input.onclick=()=>input.select();input.onfocus=()=>setTimeout(()=>input.select(),0);
+  input.onchange=commit;input.onclick=()=>input.select();input.onfocus=()=>input.select();
   return wrap;
 }
 function pillarDigitControl(){
@@ -603,7 +610,7 @@ function priceEditor(prices,stars,prefix,disableZero=false){
       input.setSelectionRange(caret,caret);
       update();
     };
-    input.onfocus=()=>{setFocus(input.id);setTimeout(()=>input.select(),0)};
+    input.onfocus=()=>{setFocus(input.id);input.select()};
     box.appendChild(row);
   });
   return box;
@@ -623,7 +630,7 @@ function carPriceEditor(label,color,getPrice,setPrice,prefix,disabled=false){
     const caret=Math.min(start+1,input.value.length);
     input.setSelectionRange(caret,caret);update();
   };
-  input.onfocus=()=>{setFocus(input.id);setTimeout(()=>input.select(),0)};
+  input.onfocus=()=>{setFocus(input.id);input.select()};
   box.appendChild(row);return box;
 }
 function setFocus(focus){
@@ -717,6 +724,7 @@ function refreshNewInput(){
     host.replaceChildren(next);
   }
   ensurePanelFits(panelEl);
+  applyKeyboardMode();
 }
 function resetFreshMode(mode){state.fresh.mode=mode;state.fresh.pending='';state.fresh.pair=null;state.fresh.columns=[];state.fresh.doubleCount=null;state.fresh.focus='qty';save();refreshNewInput()}
 function freshDisplay(){
@@ -793,10 +801,51 @@ function backspaceFresh(){
   else if(f.mode==='car'&&f.doubleCount)f.doubleCount=+String(f.doubleCount).slice(0,-1)||null;
   save();refreshNewInput();
 }
-function restoreViewportAfterUpdate(position={left:window.scrollX,top:window.scrollY}){
-  const version=manualScrollVersion;
-  const restore=()=>{if(version===manualScrollVersion)window.scrollTo(position.left,position.top)};
-  requestAnimationFrame(()=>{restore();requestAnimationFrame(restore)});
+function restoreViewportAfterUpdate(){
+  manualScrolling=false;
+  restoreScrollPosition();
+  requestAnimationFrame(restoreScrollPosition);
+}
+function restoreScrollPosition(){
+  if(manualScrolling)return;
+  const maxTop=Math.max(0,scroller.scrollHeight-scroller.clientHeight);
+  savedScroll.top=Math.min(savedScroll.top,maxTop);
+  scroller.scrollLeft=savedScroll.left;scroller.scrollTop=savedScroll.top;
+}
+function applyKeyboardMode(){
+  const external=state.externalKeyboard===true;
+  document.getElementById('keyboardToggle').textContent=external?'外接鍵盤':'手機鍵盤';
+  document.getElementById('keyboardToggle').setAttribute('aria-pressed',String(external));
+  document.querySelectorAll('input').forEach(input=>{
+    if(!input.dataset.phoneInputMode)input.dataset.phoneInputMode=input.inputMode||'text';
+    input.readOnly=external;input.inputMode=external?'none':input.dataset.phoneInputMode;
+  });
+}
+function setKeyboardMode(external){
+  state.externalKeyboard=external;save();
+  const active=document.activeElement;
+  if(external&&active.matches('input'))active.blur();
+  applyKeyboardMode();
+  if(external&&active.matches('input'))focusWithoutScroll(active);
+}
+function editExternalInput(e){
+  const input=e.target;
+  if(!state.externalKeyboard||!input.matches('input:not(.quantity-input)')||input.disabled||e.ctrlKey||e.altKey||e.metaKey)return false;
+  const digit=/^Numpad\d$/.test(e.code)?e.code.slice(-1):/^\d$/.test(e.key)?e.key:null;
+  const decimal=e.code==='NumpadDecimal'||['Decimal','.',','].includes(e.key);
+  if(digit===null&&!decimal&&!['Backspace','Delete'].includes(e.key))return false;
+  restoreViewportAfterUpdate();
+  e.preventDefault();
+  let start=input.selectionStart??input.value.length,end=input.selectionEnd??start;
+  let inserted=digit??(decimal?'.':'');
+  if(decimal&&input.classList.contains('direct'))return true;
+  if(e.key==='Backspace'&&start===end)start=Math.max(0,start-1);
+  if(e.key==='Delete'&&start===end)end=Math.min(input.value.length,end+1);
+  input.value=input.value.slice(0,start)+inserted+input.value.slice(end);
+  if(input.maxLength>0)input.value=input.value.slice(0,input.maxLength);
+  input.setSelectionRange(start+inserted.length,start+inserted.length);
+  input.dispatchEvent(new Event('input',{bubbles:true}));
+  return true;
 }
 function focusWithoutScroll(target){
   if(!target)return;
@@ -846,7 +895,7 @@ function buildTotalMultiplierEditor(){
       update();
     };
     input.onchange=()=>{if(input.value==='')input.value='1';update()};
-    input.onfocus=()=>setTimeout(()=>input.select(),0);
+    input.onfocus=()=>input.select();
     box.appendChild(control);
   });
   return box;
@@ -1125,6 +1174,7 @@ function render(){
   renderList();
   renderKeySettings();
   arrangeAllWorkspaces();
+  applyKeyboardMode();
 }
 
 function inputDigit(d){
@@ -1197,6 +1247,7 @@ document.getElementById('fontDown').onclick=()=>changeFontScale(-.1);
 document.getElementById('fontUp').onclick=()=>changeFontScale(.1);
 document.getElementById('fontReset').onclick=()=>{state.fontScale=1;applyFontScale();save();render();showStatus('字體已恢復 100%')};
 document.getElementById('themeToggle').onclick=toggleTheme;
+document.getElementById('keyboardToggle').onclick=()=>setKeyboardMode(!state.externalKeyboard);
 document.getElementById('calcKeys').addEventListener('click',e=>{
   const button=e.target.closest('button[data-calc]');
   if(button)calcAction(button.dataset.calc,button.dataset.value);
@@ -1216,21 +1267,29 @@ document.getElementById('keySettings').addEventListener('click',e=>{
   }
   openKeyCapture(action,button.dataset.add?null:Number(button.dataset.index));
 });
-// 只抵銷輸入與重排引發的自動捲動；使用者主動滑動即取消還原。
-document.addEventListener('touchmove',()=>{manualScrollVersion++},{passive:true});
-document.addEventListener('wheel',()=>{manualScrollVersion++},{passive:true});
-document.addEventListener('pointerdown',e=>{
-  manualScrollVersion++;
-  inputPointerPosition=e.target.matches('input')?{target:e.target,left:window.scrollX,top:window.scrollY,time:performance.now()}:null;
+// 使用者手勢才接受新位置；持續攔截 Safari 延遲的聚焦捲動。
+scroller.addEventListener('scroll',()=>{
+  if(manualScrolling)savedScroll={left:scroller.scrollLeft,top:scroller.scrollTop};
+  else restoreScrollPosition();
 },{passive:true});
+scroller.addEventListener('touchmove',()=>{manualScrolling=true},{passive:true});
+scroller.addEventListener('wheel',()=>{manualScrolling=true},{passive:true});
+document.addEventListener('pointerdown',e=>{
+  const rect=scroller.getBoundingClientRect();
+  manualScrolling=e.pointerType==='mouse'&&e.target===scroller&&e.clientX>=rect.right-20;
+},{passive:true});
+document.addEventListener('beforeinput',()=>{manualScrolling=false},{capture:true,passive:true});
 document.addEventListener('focusin',e=>{
-  if(inputPointerPosition?.target===e.target&&performance.now()-inputPointerPosition.time<1000){
-    restoreViewportAfterUpdate(inputPointerPosition);inputPointerPosition=null;
-  }
-  if(e.target.matches('input:not(.quantity-input)')&&e.target.value)setTimeout(()=>e.target.select(),0);
+  restoreViewportAfterUpdate();
 });
 document.addEventListener('keydown',e=>{
-  if(!e.target.matches('input')&&['PageUp','PageDown','Home','End','ArrowUp','ArrowDown',' '].includes(e.key))manualScrollVersion++;
+  if(keyCapture||e.isComposing||e.keyCode===229)return;
+  if(e.isTrusted&&e.code?.startsWith('Numpad')&&!state.externalKeyboard)setKeyboardMode(true);
+  if(editExternalInput(e))e.stopPropagation();
+},true);
+document.addEventListener('keydown',e=>{
+  if(!e.target.matches('input')&&['PageUp','PageDown','Home','End','ArrowUp','ArrowDown',' '].includes(e.key))manualScrolling=true;
+  else manualScrolling=false;
   if(e.isComposing||e.keyCode===229)return;
   if(keyCapture){captureKey(e);return}
   if(state.page==='calc'&&handleCalculatorKey(e)){e.preventDefault();return}

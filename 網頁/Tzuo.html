@@ -92,6 +92,7 @@ h1{margin:0 0 8px;text-align:center;font-size:16px;color:var(--title)}
 .price-row{margin-bottom:6px}
 .price-row label{width:45px;font-size:12px;font-weight:700}
 .price{flex:1;min-width:90px;padding:9px;border:1px solid var(--line);border-radius:8px;background:var(--field);color:var(--on-control);text-align:right;font-family:Consolas,monospace}
+.price:focus{border-color:currentColor;box-shadow:0 0 0 2px color-mix(in srgb,currentColor 22%,transparent)}
 .total-multipliers{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
 .total-multiplier{display:flex;align-items:center;gap:5px;padding:5px 7px;border:1px solid var(--line);border-radius:8px;background:var(--field)}
 .total-multiplier input{width:62px;padding:5px;border:1px solid var(--line);border-radius:6px;background:var(--panel2);color:var(--yellow);text-align:right;font-family:Consolas,monospace;font-weight:800}
@@ -602,7 +603,7 @@ function priceEditor(prices,stars,prefix,disableZero=false){
     if(disabled)prices[r]='';
     const row=document.createElement('div');row.className='price-row';
     if(disabled)row.classList.add('disabled');
-    row.innerHTML=`<label style="color:${COLORS[r]}">${NAMES[r]}</label><input id="${prefix}-${r}" class="price" inputmode="decimal" value="${prices[r]||''}" placeholder="${disabled?'無法成立':'輸入價格'}" ${disabled?'disabled':''}>`;
+    row.innerHTML=`<label style="color:${COLORS[r]}">${NAMES[r]}</label><input id="${prefix}-${r}" class="price" inputmode="decimal" style="color:${COLORS[r]}" value="${prices[r]||''}" placeholder="${disabled?'無法成立':'輸入價格'}" ${disabled?'disabled':''}>`;
     const input=row.querySelector('input');
     const update=()=>{input.value=cleanNumber(input.value);prices[r]=input.value;save();renderCalculated()};
     input.oninput=update;
@@ -623,7 +624,7 @@ function priceEditor(prices,stars,prefix,disableZero=false){
 function carPriceEditor(label,color,getPrice,setPrice,prefix,disabled=false){
   const row=document.createElement('div');
   row.className='price-row'+(disabled?' disabled':'');
-  row.innerHTML=`<label style="color:${color}">${label}</label><input id="${prefix}" class="price" inputmode="decimal" value="${getPrice()||''}" placeholder="${disabled?'此選號數無化雙注數':`輸入${label}價格`}" ${disabled?'disabled':''}>`;
+  row.innerHTML=`<label style="color:${color}">${label}</label><input id="${prefix}" class="price" inputmode="decimal" style="color:${color}" value="${getPrice()||''}" placeholder="${disabled?'此選號數無化雙注數':`輸入${label}價格`}" ${disabled?'disabled':''}>`;
   const input=row.querySelector('input');
   const update=()=>{input.value=cleanNumber(input.value);setPrice(input.value);save()};
   input.oninput=update;
@@ -843,7 +844,9 @@ function editExternalInput(e){
   if(digit===null&&!decimal&&!['Backspace','Delete'].includes(e.key))return false;
   restoreViewportAfterUpdate();
   e.preventDefault();
-  let start=input.selectionStart??input.value.length,end=input.selectionEnd??start;
+  const replace=input.dataset.replaceAll==='1';
+  let start=replace?0:(input.selectionStart??input.value.length),end=replace?input.value.length:(input.selectionEnd??start);
+  input.dataset.replaceAll='0';
   let inserted=digit??(decimal?'.':'');
   if(decimal&&input.classList.contains('direct'))return true;
   if(e.key==='Backspace'&&start===end)start=Math.max(0,start-1);
@@ -886,8 +889,10 @@ function buildTotalMultiplierEditor(){
     const control=document.createElement('label');control.className='total-multiplier';
     control.innerHTML=`<span style="color:${metricColor(r)}">${metricName(r)}</span><span style="color:var(--muted)">×</span><input inputmode="decimal" value="${state.totalMultipliers?.[r]??'1'}" aria-label="${metricName(r)}總額倍率">`;
     const input=control.querySelector('input');
+    const selectForReplacement=()=>{input.dataset.replaceAll='1';input.select()};
     const update=()=>{
       input.value=cleanNumber(input.value);
+      input.dataset.replaceAll='0';
       state.totalMultipliers[r]=input.value;
       save();refreshTotalDisplays();
     };
@@ -895,14 +900,17 @@ function buildTotalMultiplierEditor(){
     input.onkeydown=e=>{
       if(!(e.code==='NumpadDecimal'||e.key==='Decimal'||e.key==='.'||e.key===','))return;
       e.preventDefault();
-      const start=input.selectionStart??input.value.length,end=input.selectionEnd??start;
+      const replace=input.dataset.replaceAll==='1';
+      const start=replace?0:(input.selectionStart??input.value.length),end=replace?input.value.length:(input.selectionEnd??start);
+      input.dataset.replaceAll='0';
       input.value=cleanNumber(input.value.slice(0,start)+'.'+input.value.slice(end));
       const caret=Math.min(start+1,input.value.length);
       input.setSelectionRange(caret,caret);
       update();
     };
+    input.onbeforeinput=()=>{if(input.dataset.replaceAll==='1'){input.setSelectionRange(0,input.value.length);input.dataset.replaceAll='0'}};
     input.onchange=()=>{if(input.value==='')input.value='1';update()};
-    input.onfocus=()=>input.select();
+    input.onfocus=selectForReplacement;input.onclick=selectForReplacement;
     box.appendChild(control);
   });
   return box;

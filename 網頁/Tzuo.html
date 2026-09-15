@@ -179,6 +179,11 @@ h1{font-size:calc(16px * var(--font-scale))}
   .calc-cards{grid-template-columns:1fr}
 }
 @media(max-width:1024px),(hover:none) and (pointer:coarse){
+  .price-editor-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+  .car-price-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+  .price-editor-grid .price-row,.car-price-grid .price-row{display:flex;flex-direction:column;align-items:stretch;gap:4px;min-width:0;margin-bottom:0}
+  .price-editor-grid .price-row label,.car-price-grid .price-row label{width:auto;text-align:center}
+  .price-editor-grid .price,.car-price-grid .price{width:100%;min-width:0;text-align:center;padding:8px 3px}
   .total-multipliers{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px}
   .total-multiplier{min-width:0;gap:3px;padding:4px}
   .total-multiplier span{flex:none;white-space:nowrap}
@@ -591,7 +596,7 @@ function pillarDigitControl(){
   return wrap;
 }
 function priceEditor(prices,stars,prefix,disableZero=false){
-  const box=document.createElement('div');
+  const box=document.createElement('div');box.className='price-editor-grid';
   Object.keys(stars).map(Number).forEach(r=>{
     const disabled=disableZero&&!(stars[r]>0);
     if(disabled)prices[r]='';
@@ -616,7 +621,7 @@ function priceEditor(prices,stars,prefix,disableZero=false){
   return box;
 }
 function carPriceEditor(label,color,getPrice,setPrice,prefix,disabled=false){
-  const box=document.createElement('div'),row=document.createElement('div');
+  const row=document.createElement('div');
   row.className='price-row'+(disabled?' disabled':'');
   row.innerHTML=`<label style="color:${color}">${label}</label><input id="${prefix}" class="price" inputmode="decimal" value="${getPrice()||''}" placeholder="${disabled?'此選號數無化雙注數':`輸入${label}價格`}" ${disabled?'disabled':''}>`;
   const input=row.querySelector('input');
@@ -631,7 +636,7 @@ function carPriceEditor(label,color,getPrice,setPrice,prefix,disabled=false){
     input.setSelectionRange(caret,caret);update();
   };
   input.onfocus=()=>{setFocus(input.id);input.select()};
-  box.appendChild(row);return box;
+  return row;
 }
 function setFocus(focus){
   state.fresh.focus=focus;
@@ -689,8 +694,10 @@ function buildNewBody(){
   const priceSection=document.createElement('div');priceSection.className='section';
   if(state.fresh.mode==='car'){
     priceSection.innerHTML='<div class="section-title">車／化雙價格（百元）</div>';
-    priceSection.appendChild(carPriceEditor('車','var(--purple)',()=>state.fresh.carPrice,value=>state.fresh.carPrice=value,'fresh-car-price',false));
-    priceSection.appendChild(carPriceEditor('化雙','var(--green)',()=>state.fresh.doublePrice,value=>state.fresh.doublePrice=value,'fresh-double-price',freshDoubleBets()===0));
+    const carPrices=document.createElement('div');carPrices.className='car-price-grid';
+    carPrices.appendChild(carPriceEditor('車','var(--purple)',()=>state.fresh.carPrice,value=>state.fresh.carPrice=value,'fresh-car-price',false));
+    carPrices.appendChild(carPriceEditor('化雙','var(--green)',()=>state.fresh.doublePrice,value=>state.fresh.doublePrice=value,'fresh-double-price',freshDoubleBets()===0));
+    priceSection.appendChild(carPrices);
   }else{
     priceSection.innerHTML='<div class="section-title">各星價格（百元）</div>';
     priceSection.appendChild(priceEditor(state.fresh.prices,stars,'fresh-price',true));

@@ -785,7 +785,7 @@ function submit(kind){
     item={type:state.fresh.mode==='pair'?'lp':'pi',desc:state.fresh.mode==='pair'?`連碰 ${state.fresh.pair}個`:`立柱 ${state.fresh.columns.join('×')}`,stars,starPrices:{...state.fresh.prices}};
   }
   state.fresh.pending='';state.fresh.pair=null;state.fresh.columns=[];state.fresh.doubleCount=null;state.fresh.prices={};state.fresh.carPrice='';state.fresh.doublePrice='';state.fresh.focus='qty';
-  item.id=state.nextId++;state.list.push(item);save();render();focusCurrentQuantity();showStatus(`已加入清單，目前 ${state.list.length} 筆`);
+  item.id=state.nextId++;state.list.push(item);state.totalMultipliers={};save();render();focusCurrentQuantity();showStatus(`已加入清單，目前 ${state.list.length} 筆`);
 }
 function clearInput(kind){
   Object.assign(state.fresh,{pending:'',pair:null,columns:[],doubleCount:null,prices:{},carPrice:'',doublePrice:'',focus:'qty'});

@@ -301,13 +301,13 @@ const TIAN_KEYS=['heaven2','heaven3','heaven4'];
 const TIAN_NAMES={heaven2:'天二',heaven3:'天三',heaven4:'天四'};
 const TIAN_COLORS={heaven2:'#60a5fa',heaven3:'#34d399',heaven4:'#fbbf24'};
 const SHORTCUT_LABELS={
-  modePair:'切換連碰',modePillar:'切換立柱',modeCar:'切換車',submit:'加入清單',
+  modePair:'切換連碰',modePillar:'切換立柱',modeCar:'切換車',modeTian:'切換天地碰',submit:'加入清單',
   next:'確認／下一欄',backspace:'退一碼',clearAll:'清除全部',
   digit0:'輸入數字 0',digit1:'輸入數字 1',digit2:'輸入數字 2',digit3:'輸入數字 3',digit4:'輸入數字 4',
   digit5:'輸入數字 5',digit6:'輸入數字 6',digit7:'輸入數字 7',digit8:'輸入數字 8',digit9:'輸入數字 9'
 };
 const DEFAULT_SHORTCUTS={
-  modePair:['NumLock'],modePillar:['NumpadDivide','Slash'],modeCar:['NumpadMultiply','Shift+Digit8'],submit:['NumpadAdd','Shift+Equal'],
+  modePair:['NumLock'],modePillar:['NumpadDivide','Slash'],modeCar:['NumpadMultiply','Shift+Digit8'],modeTian:['LaunchApp2'],submit:['NumpadAdd','Shift+Equal'],
   next:['Enter','NumpadEnter','Tab'],backspace:['Backspace'],clearAll:['Escape'],
   digit0:['Digit0','Numpad0'],digit1:['Digit1','Numpad1'],digit2:['Digit2','Numpad2'],digit3:['Digit3','Numpad3'],digit4:['Digit4','Numpad4'],
   digit5:['Digit5','Numpad5'],digit6:['Digit6','Numpad6'],digit7:['Digit7','Numpad7'],digit8:['Digit8','Numpad8'],digit9:['Digit9','Numpad9']
@@ -1236,6 +1236,7 @@ function handleCalculatorKey(e){
 }
 
 function keySignature(e){
+  if(e.code==='LaunchApp2'||['LaunchApplication2','Calculator'].includes(e.key))return'LaunchApp2';
   const parts=[];
   if(e.ctrlKey)parts.push('Ctrl');
   if(e.altKey)parts.push('Alt');
@@ -1254,7 +1255,7 @@ function keyName(signature){
     Ctrl:'Ctrl',Alt:'Alt',Shift:'Shift',Meta:'Windows',
     NumLock:'Num Lock',NumpadDivide:'數字鍵盤 ÷',NumpadMultiply:'數字鍵盤 *',NumpadAdd:'數字鍵盤 +',
     NumpadEnter:'數字鍵盤 Enter',Enter:'Enter',Tab:'Tab',Backspace:'Backspace',
-    Escape:'Esc',Slash:'/',Equal:'=',Space:'空白鍵'
+    Escape:'Esc',Slash:'/',Equal:'=',Space:'空白鍵',LaunchApp2:'計算機鍵'
   };
   return signature.split('+').map(part=>{
     if(names[part])return names[part];
@@ -1475,6 +1476,12 @@ document.addEventListener('keydown',e=>{
   if(action==='modeCar'){
     e.preventDefault();
     resetFreshMode('car');
+    return;
+  }
+  if(action==='modeTian'){
+    e.preventDefault();
+    if(state.game!=='49')switchGame('49');
+    resetFreshMode('tian');
     return;
   }
   if(action?.startsWith('digit')&&inputDigit(action.slice(-1))){e.preventDefault();return}

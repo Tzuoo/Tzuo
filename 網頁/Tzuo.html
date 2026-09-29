@@ -325,7 +325,7 @@ const defaults={
   shortcutVersion:2,
   shortcuts:DEFAULT_SHORTCUTS,
   fresh:{
-    mode:'pair',focus:'qty',pending:'',pair:null,columns:[],doubleCount:null,maxStar:4,pillarDigits:'single',prices:{2:'',3:'',4:''},carPrice:'',doublePrice:'',specialCount:'',regularCount:'',tianPrices:{heaven2:'',heaven3:'',heaven4:''}
+    mode:'pair',focus:'qty',pending:'',pair:null,columns:[],doubleCount:null,maxStar:4,pillarDigits:'single',prices:{2:'',3:'',4:''},carPrice:'',doublePrice:'',specialCount:'',regularCount:'',tianDigits:'double',maxHeaven:4,tianPrices:{heaven2:'',heaven3:'',heaven4:''}
   }
 };
 
@@ -372,6 +372,10 @@ function doublesFor(count){
 function tianBets(special,regular){
   const t=clamp(special,0,49,0),g=clamp(regular,0,49,0);
   return{heaven2:t*g,heaven3:t*combination(g,2),heaven4:t*combination(g,3)};
+}
+function visibleTianBets(){
+  const all=tianBets(state.fresh.specialCount,state.fresh.regularCount);
+  return Object.fromEntries(TIAN_KEYS.slice(0,clamp(state.fresh.maxHeaven,2,4,4)-1).map(key=>[key,all[key]]));
 }
 function gameKey(game,key){return `${game}:${key}`}
 function splitGameKey(key){const parts=String(key).split(':');return parts.length===2?parts:['539',key]}
@@ -427,6 +431,10 @@ function mergeState(saved){
   out.gameFresh={};
   for(const game of Object.keys(GAMES))out.gameFresh[game]=normalizeFresh(saved.gameFresh?.[game]||(game===out.game?saved.fresh:null));
   out.fresh=out.gameFresh[out.game];
+  for(const fresh of Object.values(out.gameFresh)){
+    fresh.tianDigits=fresh.tianDigits==='single'?'single':'double';
+    fresh.maxHeaven=clamp(fresh.maxHeaven,2,4,4);
+  }
   if(out.game==='539'&&out.fresh.mode==='tian')out.fresh.mode='pair';
   if(out.game==='49'&&out.fresh.mode==='tian'&&out.fresh.focus==='qty')out.fresh.focus='tian-special';
   out.totalMultipliers={};
@@ -625,6 +633,22 @@ function pillarDigitControl(){
   });
   return wrap;
 }
+function tianDigitControl(){
+  const wrap=document.createElement('div');wrap.className='control';
+  wrap.innerHTML='<span>上限</span><button data-mode="single">單</button><button data-mode="double">雙</button>';
+  wrap.querySelectorAll('button').forEach(button=>{
+    const active=button.dataset.mode===state.fresh.tianDigits;
+    button.style.background=active?'var(--accent)':'transparent';
+    button.style.color=active?'#fff':'var(--on-control)';
+    button.onclick=()=>{
+      if(state.fresh.tianDigits===button.dataset.mode)return;
+      state.fresh.tianDigits=button.dataset.mode;
+      state.fresh.specialCount='';state.fresh.regularCount='';state.fresh.focus='tian-special';
+      save();refreshNewInput();focusWithoutScroll(document.getElementById('tian-special'));
+    };
+  });
+  return wrap;
+}
 function priceEditor(prices,stars,prefix,disableZero=false){
   const box=document.createElement('div');box.className='price-editor-grid';
   Object.keys(stars).forEach(r=>{
@@ -711,16 +735,23 @@ function buildNewBody(){
     if(state.game==='539'){const label=document.createElement('div');label.className='section-title';label.textContent='化雙選號數（1～39）';body.appendChild(label)}
   }else{
     const heading=document.createElement('div');heading.className='section-title';heading.textContent='天地碰：特號數 T 與正碼數 G（T＋G 不超過49）';body.appendChild(heading);
+    const controls=document.createElement('div');controls.className='control-row section';
+    controls.appendChild(directControl('顯示至天',state.fresh.maxHeaven,2,4,v=>{state.fresh.maxHeaven=v;save();refreshNewInput()}));
+    controls.appendChild(tianDigitControl());body.appendChild(controls);
     const counts=document.createElement('div');counts.className='tian-counts';
-    counts.innerHTML=`<label>特號數 T<input id="tian-special" inputmode="numeric" maxlength="2" autocomplete="off" value="${state.fresh.specialCount}" aria-label="特號數 T"></label><label>正碼數 G<input id="tian-regular" inputmode="numeric" maxlength="2" autocomplete="off" value="${state.fresh.regularCount}" aria-label="正碼數 G"></label>`;
+    counts.innerHTML=`<label>特號數 T<input id="tian-special" inputmode="numeric" maxlength="${state.fresh.tianDigits==='single'?1:2}" autocomplete="off" value="${state.fresh.specialCount}" aria-label="特號數 T"></label><label>正碼數 G<input id="tian-regular" inputmode="numeric" maxlength="${state.fresh.tianDigits==='single'?1:2}" autocomplete="off" value="${state.fresh.regularCount}" aria-label="正碼數 G"></label>`;
     for(const [id,field] of [['tian-special','specialCount'],['tian-regular','regularCount']]){
       const fieldInput=counts.querySelector('#'+id);
-      fieldInput.oninput=()=>{
-        const digits=fieldInput.value.replace(/\D/g,'').slice(0,2);
+      const update=()=>{
+        const single=state.fresh.tianDigits==='single';
+        const digits=fieldInput.value.replace(/[０-９]/g,c=>String(c.charCodeAt(0)-0xff10)).replace(/\D/g,'').slice(0,single?1:2);
         const other=+(state.fresh[id==='tian-special'?'regularCount':'specialCount'])||0;
-        fieldInput.value=digits?String(Math.min(+digits,48,49-other)):'';
+        fieldInput.value=digits?String(Math.min(+digits,single?9:48,49-other)):'';
         state.fresh[field]=fieldInput.value;save();renderCalculated();
+        if(single&&+fieldInput.value>0)focusWithoutScroll(document.getElementById(id==='tian-special'?'tian-regular':'fresh-tian-price-heaven2'));
       };
+      fieldInput.oninput=e=>{if(!e.isComposing)update()};
+      fieldInput.oncompositionend=update;
       fieldInput.onfocus=()=>{state.fresh.focus=id;save();fieldInput.select()};
       fieldInput.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();focusWithoutScroll(document.getElementById(id==='tian-special'?'tian-regular':'fresh-tian-price-heaven2'))}};
     }
@@ -761,8 +792,8 @@ function buildNewBody(){
     if(state.game==='539')carPrices.appendChild(carPriceEditor('化雙','var(--green)',()=>state.fresh.doublePrice,value=>state.fresh.doublePrice=value,'fresh-double-price',freshDoubleBets()===0));
     priceSection.appendChild(carPrices);
   }else if(state.fresh.mode==='tian'){
-    priceSection.innerHTML='<div class="section-title">天二／天三／天四價格（百元）</div>';
-    priceSection.appendChild(priceEditor(state.fresh.tianPrices,tianBets(state.fresh.specialCount,state.fresh.regularCount),'fresh-tian-price',true));
+    priceSection.innerHTML='<div class="section-title">天地碰價格（百元）</div>';
+    priceSection.appendChild(priceEditor(state.fresh.tianPrices,visibleTianBets(),'fresh-tian-price',true));
   }else{
     priceSection.innerHTML='<div class="section-title">各星價格（百元）</div>';
     priceSection.appendChild(priceEditor(state.fresh.prices,stars,'fresh-price',true));
@@ -829,13 +860,13 @@ function freshPriceStars(){
 function renderCalculated(){
   const stars=freshPriceStars(),note=document.getElementById('freshCompact');
   if(note)note.innerHTML=compactStars(stars);
-  if(state.fresh.mode==='tian')for(const [key,count] of Object.entries(tianBets(state.fresh.specialCount,state.fresh.regularCount))){
+  if(state.fresh.mode==='tian')for(const [key,count] of Object.entries(visibleTianBets())){
     const input=document.getElementById('fresh-tian-price-'+key);
     if(input){input.disabled=count===0;input.placeholder=count===0?'無法成立':'輸入價格';input.parentElement.classList.toggle('disabled',count===0)}
   }
 }
 function compactStars(stars){
-  if(state.fresh.mode==='tian')return Object.entries(tianBets(state.fresh.specialCount,state.fresh.regularCount)).map(([key,count])=>`<span style="color:${TIAN_COLORS[key]}">${TIAN_NAMES[key]} <b>${fmt(count)}注</b></span>`).join('　');
+  if(state.fresh.mode==='tian')return Object.entries(visibleTianBets()).map(([key,count])=>`<span style="color:${TIAN_COLORS[key]}">${TIAN_NAMES[key]} <b>${fmt(count)}注</b></span>`).join('　');
   if(state.fresh.mode==='car')return`<span style="color:var(--purple)">全車 <b>固定${GAMES[state.game].car}注</b></span>${state.game==='539'?`　<span style="color:var(--green)">化雙 <b>${fmt(freshDoubleBets())}注</b>（選${freshDoubleCount()}個號碼）</span>`:''}`;
   return Object.keys(stars).map(Number).map(r=>`<span style="color:${COLORS[r]}">${NAMES[r]} <b>${stars[r]||0}</b>柱</span>`).join('　');
 }
@@ -857,8 +888,8 @@ function submit(kind){
   if(state.fresh.mode==='tian'){
     const t=+state.fresh.specialCount,g=+state.fresh.regularCount;
     if(!t||!g||t+g>49||t>49||g>49)return alert('特號與正碼至少各1個，合計不得超過49個');
-    const stars=tianBets(t,g);
-    item={type:'tian',desc:`天地碰 特號${t}個／正碼${g}個`,stars,starPrices:{...state.fresh.tianPrices}};
+    const stars=visibleTianBets();
+    item={type:'tian',desc:`天地碰 特號${t}個／正碼${g}個`,stars,starPrices:Object.fromEntries(Object.keys(stars).map(key=>[key,state.fresh.tianPrices[key]]))};
   }else{
     if(state.fresh.mode==='pair'&&!state.fresh.pair)return alert('請先輸入連碰組數');
     if(state.fresh.mode==='pair'&&state.fresh.pair>GAMES[state.game].max)return alert(`連碰最多${GAMES[state.game].max}個號碼`);

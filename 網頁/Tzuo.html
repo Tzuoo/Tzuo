@@ -873,6 +873,11 @@ function submit(kind){
     }
   }
   item.game=state.game;
+  if(state.fresh.mode==='tian')Object.keys(state.fresh.tianPrices).forEach(key=>state.fresh.tianPrices[key]='');
+  else if(state.fresh.mode==='car'){
+    state.fresh.carPrice='';
+    if(state.game==='539')state.fresh.doublePrice='';
+  }else Object.keys(state.fresh.prices).forEach(key=>state.fresh.prices[key]='');
   state.fresh.pending='';state.fresh.pair=null;state.fresh.columns=[];state.fresh.doubleCount=null;state.fresh.specialCount='';state.fresh.regularCount='';state.fresh.focus=state.fresh.mode==='tian'?'tian-special':'qty';
   item.id=state.nextId++;state.list.push(item);state.totalMultipliers={};save();render();focusCurrentQuantity();showStatus(`已加入清單，目前 ${state.list.length} 筆`);
 }

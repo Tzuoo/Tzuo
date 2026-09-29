@@ -379,7 +379,7 @@ function normalizedMultiplier(value){const n=parseFloat(value);return Number.isF
 function amountHundred(count,price){const p=parseFloat(price);return Number.isFinite(p)?count*p:null;}
 function amountYuan(count,price){const h=amountHundred(count,price);return h===null?null:h*100;}
 function fmt(value){return Number(value||0).toLocaleString('en-US',{maximumFractionDigits:8});}
-function metricName(key){const [game,kind]=splitGameKey(key);return `${game} ${kind==='car'?'車':kind==='double'?'化雙':TIAN_NAMES[kind]||NAMES[kind]||kind}`}
+function metricName(key){const kind=splitGameKey(key)[1];return kind==='car'?'車':kind==='double'?'化雙':TIAN_NAMES[kind]||NAMES[kind]||kind}
 function metricColor(key){const kind=splitGameKey(key)[1];return kind==='car'?'var(--purple)':kind==='double'?'var(--green)':TIAN_COLORS[kind]||COLORS[kind]}
 function metricUnit(key){const kind=splitGameKey(key)[1];return kind==='car'||kind==='double'||TIAN_NAMES[kind]?'注':'柱'}
 function metricSort(a,b){
@@ -694,7 +694,7 @@ function buildNewBody(){
   body.appendChild(modes);
   if(state.fresh.mode==='pair'||state.fresh.mode==='pillar'){
     const range=document.createElement('div');range.className='section-title';
-    range.textContent=`${state.game} 號碼範圍 1～${GAMES[state.game].max}；${state.fresh.mode==='pair'?'連碰選號數':'立柱各柱號碼數合計'}最多 ${GAMES[state.game].max}`;
+    range.textContent=`號碼範圍 1～${GAMES[state.game].max}；${state.fresh.mode==='pair'?'連碰選號數':'立柱各柱號碼數合計'}最多 ${GAMES[state.game].max}`;
     body.appendChild(range);
   }
   if(state.fresh.mode==='pair'||state.fresh.mode==='pillar'){
@@ -979,7 +979,7 @@ function buildTotalMultiplierEditor(){
   if(!stars.length)return box;
   stars.forEach(r=>{
     const control=document.createElement('label');control.className='total-multiplier';
-    control.innerHTML=`<span style="color:${metricColor(r)}">${metricName(r)}</span><span style="color:var(--muted)">×</span><input inputmode="decimal" value="${state.totalMultipliers?.[r]??'1'}" aria-label="${metricName(r)}總額倍率">`;
+    control.innerHTML=`<span style="color:${metricColor(r)}">${metricName(r)}</span><span style="color:var(--muted)">×</span><input inputmode="decimal" value="${state.totalMultipliers?.[r]??'1'}" aria-label="${splitGameKey(r)[0]} ${metricName(r)}總額倍率">`;
     const input=control.querySelector('input');
     const selectForReplacement=()=>{input.dataset.replaceAll='1';input.select()};
     const update=()=>{
@@ -1058,7 +1058,7 @@ function renderList(){
   state.list.forEach(item=>{
     const row=document.createElement('div');row.className='list-item';
     const typeName=item.type==='pi'?'立柱':item.type==='car'?'全車':item.type==='tian'?'天地碰':'連碰';
-    row.innerHTML=`<div class="list-main"><span class="tag ${item.type}">${item.game||'539'} ${typeName}</span><div class="desc">${item.desc}</div><div class="details">${Object.entries(item.stars||{}).map(([r,n])=>{const price=item.starPrices?.[r],amount=amountYuan(n,price),key=gameKey(item.game||'539',r);return`<span style="color:${metricColor(key)}">${metricName(key)}</span> ${n}注${amount===null?'':` × ${price} = ${fmt(amount)}元`}`}).join('<br>')||'缺少明細'}</div></div><button class="delete">×</button>`;
+    row.innerHTML=`<div class="list-main"><span class="tag ${item.type}">${typeName}</span><div class="desc">${item.desc}</div><div class="details">${Object.entries(item.stars||{}).map(([r,n])=>{const price=item.starPrices?.[r],amount=amountYuan(n,price),key=gameKey(item.game||'539',r);return`<span style="color:${metricColor(key)}">${metricName(key)}</span> ${n}注${amount===null?'':` × ${price} = ${fmt(amount)}元`}`}).join('<br>')||'缺少明細'}</div></div><button class="delete">×</button>`;
     row.querySelector('button').onclick=()=>deleteItem(item.id);details.appendChild(row);
   });
 }

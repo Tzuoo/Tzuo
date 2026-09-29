@@ -748,7 +748,7 @@ function buildNewBody(){
         const other=+(state.fresh[id==='tian-special'?'regularCount':'specialCount'])||0;
         fieldInput.value=digits?String(Math.min(+digits,single?9:48,49-other)):'';
         state.fresh[field]=fieldInput.value;save();renderCalculated();
-        if(single&&+fieldInput.value>0)focusWithoutScroll(document.getElementById(id==='tian-special'?'tian-regular':'fresh-tian-price-heaven2'));
+        if(+fieldInput.value>0&&(single||digits.length===2))focusWithoutScroll(document.getElementById(id==='tian-special'?'tian-regular':'fresh-tian-price-heaven2'));
       };
       fieldInput.oninput=e=>{if(!e.isComposing)update()};
       fieldInput.oncompositionend=update;

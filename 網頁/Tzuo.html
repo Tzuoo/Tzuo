@@ -75,8 +75,14 @@ h1{margin:0 0 8px;text-align:center;font-size:16px;color:var(--title)}
 .section:last-child{border-bottom:0}
 .section-title{margin-bottom:7px;font-size:11px;font-weight:700;color:var(--muted)}
 .mode-row,.control-row,.price-row,.actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.game-row{display:flex;gap:6px;margin-bottom:8px}
+.game-row .mode-btn{min-width:0}
+.tian-counts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin:8px 0}
+.tian-counts label{display:flex;flex-direction:column;gap:4px;text-align:center;color:var(--muted);font-size:12px;font-weight:700}
+.tian-counts input{width:100%;min-width:0;padding:9px;border:1px solid var(--line);border-radius:8px;background:var(--field);color:var(--on-control);text-align:center}
 .mode-btn{flex:1;min-width:100px;padding:10px;border:1px solid var(--line);border-radius:9px;background:var(--button);color:var(--muted);font-weight:800}
 .mode-btn.active{border-color:var(--yellow);color:var(--on-control);box-shadow:0 0 0 2px rgba(251,191,36,.15)}
+.mode-row.four-modes .mode-btn{min-width:0;flex:1 1 0;padding:9px 3px}
 .control{display:flex;align-items:center;border:1px solid var(--line);border-radius:18px;overflow:hidden;background:var(--panel2)}
 .control button{width:30px;height:30px;border:0;background:transparent;color:var(--on-control)}
 .control span{padding:0 5px;font-size:11px;color:var(--muted)}
@@ -115,6 +121,9 @@ h1{margin:0 0 8px;text-align:center;font-size:16px;color:var(--title)}
 .car-layout .number-display{min-height:58px;padding:7px}
 .car-layout .section{padding:6px 0}
 .total-head,.total-row{display:flex;align-items:center;gap:4px;padding:6px;border-bottom:1px solid var(--line)}
+.total-table-host{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.total-table-host .total-head,.total-table-host .total-row{width:max-content;min-width:100%}
+.total-table-host .cell-star{min-width:74px}
 .total-head{background:var(--total-head);font-weight:800}
 .total-grand{display:flex;justify-content:space-between;padding:9px;background:var(--total-grand);border-bottom:2px solid var(--accent);color:var(--highlight);font-weight:800}
 .cell-index{width:28px;flex:none;color:var(--muted);font-size:11px}
@@ -131,6 +140,7 @@ h1{margin:0 0 8px;text-align:center;font-size:16px;color:var(--title)}
 .tag.lp{background:rgba(96,165,250,.16);color:var(--blue)}
 .tag.pi{background:rgba(52,211,153,.16);color:var(--green)}
 .tag.car{background:rgba(192,132,252,.16);color:var(--purple)}
+.tag.tian{background:rgba(251,191,36,.16);color:var(--yellow)}
 .desc{margin:3px 0;font-family:Consolas,monospace;font-size:13px}
 .details{line-height:1.8;color:var(--muted);font-size:12px}
 .list-total-row{display:flex;justify-content:space-between;padding:8px 12px;border-bottom:1px solid var(--line)}
@@ -286,6 +296,10 @@ const LEGACY_KEY='539appStatePersistent_mobile_v3';
 const LEGACY_NEW_KEY='539_v27_count_only_integrated';
 const COLORS={2:'#60a5fa',3:'#34d399',4:'#fbbf24',5:'#f87171',6:'#c084fc',7:'#38bdf8',8:'#a3e635',9:'#fb923c'};
 const NAMES={2:'二星',3:'三星',4:'四星',5:'五星',6:'六星',7:'七星',8:'八星',9:'九星'};
+const GAMES={'539':{max:39,car:38},'49':{max:49,car:48}};
+const TIAN_KEYS=['heaven2','heaven3','heaven4'];
+const TIAN_NAMES={heaven2:'天二',heaven3:'天三',heaven4:'天四'};
+const TIAN_COLORS={heaven2:'#60a5fa',heaven3:'#34d399',heaven4:'#fbbf24'};
 const SHORTCUT_LABELS={
   modePair:'切換連碰',modePillar:'切換立柱',modeCar:'切換車',submit:'加入清單',
   next:'確認／下一欄',backspace:'退一碼',clearAll:'清除全部',
@@ -301,6 +315,7 @@ const DEFAULT_SHORTCUTS={
 
 const defaults={
   page:'new',
+  game:'539',
   list:[],
   totalMultipliers:{},
   nextId:1,
@@ -310,7 +325,7 @@ const defaults={
   shortcutVersion:2,
   shortcuts:DEFAULT_SHORTCUTS,
   fresh:{
-    mode:'pair',focus:'qty',pending:'',pair:null,columns:[],doubleCount:null,maxStar:4,pillarDigits:'single',prices:{2:'',3:'',4:''},carPrice:'',doublePrice:''
+    mode:'pair',focus:'qty',pending:'',pair:null,columns:[],doubleCount:null,maxStar:4,pillarDigits:'single',prices:{2:'',3:'',4:''},carPrice:'',doublePrice:'',specialCount:'',regularCount:'',tianPrices:{heaven2:'',heaven3:'',heaven4:''}
   }
 };
 
@@ -354,15 +369,21 @@ function doublesFor(count){
   const n=clamp(count,0,39,0);
   return Math.round(n*(39-n)*(38-n)/2);
 }
+function tianBets(special,regular){
+  const t=clamp(special,0,49,0),g=clamp(regular,0,49,0);
+  return{heaven2:t*g,heaven3:t*combination(g,2),heaven4:t*combination(g,3)};
+}
+function gameKey(game,key){return `${game}:${key}`}
+function splitGameKey(key){const parts=String(key).split(':');return parts.length===2?parts:['539',key]}
 function normalizedMultiplier(value){const n=parseFloat(value);return Number.isFinite(n)?n:1;}
 function amountHundred(count,price){const p=parseFloat(price);return Number.isFinite(p)?count*p:null;}
 function amountYuan(count,price){const h=amountHundred(count,price);return h===null?null:h*100;}
 function fmt(value){return Number(value||0).toLocaleString('en-US',{maximumFractionDigits:8});}
-function metricName(key){return key==='car'?'車':key==='double'?'化雙':NAMES[key]}
-function metricColor(key){return key==='car'?'var(--purple)':key==='double'?'var(--green)':COLORS[key]}
-function metricUnit(key){return key==='car'?'注':key==='double'?'注':'柱'}
+function metricName(key){const [game,kind]=splitGameKey(key);return `${game} ${kind==='car'?'車':kind==='double'?'化雙':TIAN_NAMES[kind]||NAMES[kind]||kind}`}
+function metricColor(key){const kind=splitGameKey(key)[1];return kind==='car'?'var(--purple)':kind==='double'?'var(--green)':TIAN_COLORS[kind]||COLORS[kind]}
+function metricUnit(key){const kind=splitGameKey(key)[1];return kind==='car'||kind==='double'||TIAN_NAMES[kind]?'注':'柱'}
 function metricSort(a,b){
-  const rank=key=>key==='car'?100:key==='double'?101:Number(key);
+  const rank=key=>{const [game,kind]=splitGameKey(key);return(game==='49'?1000:0)+(kind==='car'?100:kind==='double'?101:TIAN_KEYS.includes(kind)?102+TIAN_KEYS.indexOf(kind):Number(kind))};
   return rank(a)-rank(b);
 }
 function safeItem(item,index){
@@ -372,7 +393,8 @@ function safeItem(item,index){
   if(starPrices.pack!==undefined&&starPrices.double===undefined){starPrices.double=starPrices.pack;delete starPrices.pack}
   return {
     id:Number.isFinite(+item?.id)?+item.id:index+1,
-    type:['pi','car'].includes(item?.type)?item.type:'lp',
+    type:['pi','car','tian'].includes(item?.type)?item.type:'lp',
+    game:item?.game==='49'?'49':'539',
     desc:String(item?.desc||'舊資料'),
     stars,starPrices
   };
@@ -400,8 +422,15 @@ function loadState(){
 function mergeState(saved){
   const out=clone(defaults);
   Object.assign(out,saved);
-  out.fresh={...defaults.fresh,...saved.fresh,prices:{...defaults.fresh.prices,...saved.fresh?.prices}};
-  out.totalMultipliers=saved.totalMultipliers&&typeof saved.totalMultipliers==='object'?{...saved.totalMultipliers}:{};
+  const normalizeFresh=fresh=>({...clone(defaults.fresh),...fresh,prices:{...defaults.fresh.prices,...fresh?.prices},tianPrices:{...defaults.fresh.tianPrices,...fresh?.tianPrices}});
+  out.game=saved.game==='49'?'49':'539';
+  out.gameFresh={};
+  for(const game of Object.keys(GAMES))out.gameFresh[game]=normalizeFresh(saved.gameFresh?.[game]||(game===out.game?saved.fresh:null));
+  out.fresh=out.gameFresh[out.game];
+  if(out.game==='539'&&out.fresh.mode==='tian')out.fresh.mode='pair';
+  if(out.game==='49'&&out.fresh.mode==='tian'&&out.fresh.focus==='qty')out.fresh.focus='tian-special';
+  out.totalMultipliers={};
+  if(saved.totalMultipliers&&typeof saved.totalMultipliers==='object')for(const [key,value] of Object.entries(saved.totalMultipliers))out.totalMultipliers[key.includes(':')?key:gameKey('539',key)]=value;
   if(!out.fresh.doublePrice&&saved.fresh?.packPrice)out.fresh.doublePrice=saved.fresh.packPrice;
   if(!['single','double'].includes(out.fresh.pillarDigits)){
     out.fresh.pillarDigits=clamp(out.fresh.maxValue,1,99,9)<=9?'single':'double';
@@ -418,7 +447,7 @@ function mergeState(saved){
   out.nextId=Math.max(Number(saved.nextId)||1,...out.list.map(x=>x.id+1));
   return out;
 }
-function save(){localStorage.setItem(STATE_KEY,JSON.stringify(state));}
+function save(){state.gameFresh[state.game]=state.fresh;localStorage.setItem(STATE_KEY,JSON.stringify(state));}
 function saveLayout(){localStorage.setItem(LAYOUT_KEY,JSON.stringify(layout));}
 function applyFontScale(){
   state.fontScale=Math.max(.8,Math.min(1.6,Number(state.fontScale)||1));
@@ -598,12 +627,12 @@ function pillarDigitControl(){
 }
 function priceEditor(prices,stars,prefix,disableZero=false){
   const box=document.createElement('div');box.className='price-editor-grid';
-  Object.keys(stars).map(Number).forEach(r=>{
+  Object.keys(stars).forEach(r=>{
     const disabled=disableZero&&!(stars[r]>0);
-    if(disabled)prices[r]='';
     const row=document.createElement('div');row.className='price-row';
     if(disabled)row.classList.add('disabled');
-    row.innerHTML=`<label style="color:${COLORS[r]}">${NAMES[r]}</label><input id="${prefix}-${r}" class="price" inputmode="decimal" style="color:${COLORS[r]}" value="${prices[r]||''}" placeholder="${disabled?'無法成立':'輸入價格'}" ${disabled?'disabled':''}>`;
+    const color=TIAN_COLORS[r]||COLORS[r],name=TIAN_NAMES[r]||NAMES[r];
+    row.innerHTML=`<label style="color:${color}">${name}</label><input id="${prefix}-${r}" class="price" inputmode="decimal" style="color:${color}" value="${prices[r]||''}" placeholder="${disabled?'無法成立':'輸入價格'}" ${disabled?'disabled':''}>`;
     const input=row.querySelector('input');
     const update=()=>{input.value=cleanNumber(input.value);prices[r]=input.value;save();renderCalculated()};
     input.oninput=update;
@@ -653,52 +682,87 @@ function renderNew(){
 function buildNewBody(){
   const body=document.createElement('div');
   if(state.fresh.mode==='car')body.className='car-layout';
-  const modes=document.createElement('div');modes.className='mode-row';
-  modes.innerHTML=`<button class="mode-btn ${state.fresh.mode==='pair'?'active':''}">連碰</button><button class="mode-btn ${state.fresh.mode==='pillar'?'active':''}">立柱</button><button class="mode-btn ${state.fresh.mode==='car'?'active':''}">車</button>`;
+  const games=document.createElement('div');games.className='game-row';
+  games.innerHTML=`<button class="mode-btn ${state.game==='539'?'active':''}">539</button><button class="mode-btn ${state.game==='49'?'active':''}">49號</button>`;
+  games.children[0].onclick=()=>switchGame('539');games.children[1].onclick=()=>switchGame('49');body.appendChild(games);
+  const modes=document.createElement('div');modes.className='mode-row'+(state.game==='49'?' four-modes':'');
+  modes.innerHTML=`<button class="mode-btn ${state.fresh.mode==='pair'?'active':''}">連碰</button><button class="mode-btn ${state.fresh.mode==='pillar'?'active':''}">立柱</button><button class="mode-btn ${state.fresh.mode==='car'?'active':''}">全車</button>${state.game==='49'?`<button class="mode-btn ${state.fresh.mode==='tian'?'active':''}">天地碰</button>`:''}`;
   modes.children[0].onclick=()=>resetFreshMode('pair');
   modes.children[1].onclick=()=>resetFreshMode('pillar');
   modes.children[2].onclick=()=>resetFreshMode('car');
+  if(state.game==='49')modes.children[3].onclick=()=>resetFreshMode('tian');
   body.appendChild(modes);
-  if(state.fresh.mode!=='car'){
+  if(state.fresh.mode==='pair'||state.fresh.mode==='pillar'){
+    const range=document.createElement('div');range.className='section-title';
+    range.textContent=`${state.game} 號碼範圍 1～${GAMES[state.game].max}；${state.fresh.mode==='pair'?'連碰選號數':'立柱各柱號碼數合計'}最多 ${GAMES[state.game].max}`;
+    body.appendChild(range);
+  }
+  if(state.fresh.mode==='pair'||state.fresh.mode==='pillar'){
     const controls=document.createElement('div');controls.className='control-row section';
     controls.appendChild(directControl('顯示至',state.fresh.maxStar,2,9,v=>{state.fresh.maxStar=v;save();refreshNewInput()}));
     if(state.fresh.mode==='pillar'){
       controls.appendChild(pillarDigitControl());
     }
     body.appendChild(controls);
-  }else{
+  }else if(state.fresh.mode==='car'){
     const cards=document.createElement('div');cards.className='calc-cards';
-    cards.innerHTML=`<div class="calc-card"><div class="calc-card-title" style="color:var(--purple)">車</div><div class="calc-card-value">固定 38 注</div><div class="calc-card-note">鎖定1個號碼，與其餘38個號碼配對。</div></div>
-      <div class="calc-card"><div class="calc-card-title" style="color:var(--green)">化雙</div><div class="calc-card-value">${fmt(freshDoubleBets())} 注</div><div class="calc-card-note">選${freshDoubleCount()}個號碼：${freshDoubleCount()} × ${Math.max(0,39-freshDoubleCount())} × ${Math.max(0,38-freshDoubleCount())} ÷ 2</div></div>`;
+    cards.innerHTML=`<div class="calc-card"><div class="calc-card-title" style="color:var(--purple)">全車</div><div class="calc-card-value">固定 ${GAMES[state.game].car} 注</div><div class="calc-card-note">1～${GAMES[state.game].max} 號，鎖定1個號碼與其餘${GAMES[state.game].car}個配對。</div></div>${state.game==='539'?`<div class="calc-card"><div class="calc-card-title" style="color:var(--green)">化雙</div><div class="calc-card-value">${fmt(freshDoubleBets())} 注</div><div class="calc-card-note">選${freshDoubleCount()}個號碼：${freshDoubleCount()} × ${Math.max(0,39-freshDoubleCount())} × ${Math.max(0,38-freshDoubleCount())} ÷ 2</div></div>`:''}`;
     body.appendChild(cards);
-    const label=document.createElement('div');label.className='section-title';label.textContent='化雙選號數（1～39）';body.appendChild(label);
+    if(state.game==='539'){const label=document.createElement('div');label.className='section-title';label.textContent='化雙選號數（1～39）';body.appendChild(label)}
+  }else{
+    const heading=document.createElement('div');heading.className='section-title';heading.textContent='天地碰：特號數 T 與正碼數 G（T＋G 不超過49）';body.appendChild(heading);
+    const counts=document.createElement('div');counts.className='tian-counts';
+    counts.innerHTML=`<label>特號數 T<input id="tian-special" inputmode="numeric" maxlength="2" autocomplete="off" value="${state.fresh.specialCount}" aria-label="特號數 T"></label><label>正碼數 G<input id="tian-regular" inputmode="numeric" maxlength="2" autocomplete="off" value="${state.fresh.regularCount}" aria-label="正碼數 G"></label>`;
+    for(const [id,field] of [['tian-special','specialCount'],['tian-regular','regularCount']]){
+      const fieldInput=counts.querySelector('#'+id);
+      fieldInput.oninput=()=>{
+        const digits=fieldInput.value.replace(/\D/g,'').slice(0,2);
+        const other=+(state.fresh[id==='tian-special'?'regularCount':'specialCount'])||0;
+        fieldInput.value=digits?String(Math.min(+digits,48,49-other)):'';
+        state.fresh[field]=fieldInput.value;save();renderCalculated();
+      };
+      fieldInput.onfocus=()=>{state.fresh.focus=id;save();fieldInput.select()};
+      fieldInput.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();focusWithoutScroll(document.getElementById(id==='tian-special'?'tian-regular':'fresh-tian-price-heaven2'))}};
+    }
+    body.appendChild(counts);
   }
-  const display=document.createElement('div');display.id='freshDisplay';display.className='number-display'+(state.fresh.focus==='qty'?' focused':'');
-  const text=document.createElement('span');text.textContent=freshDisplay();display.appendChild(text);
-  const input=document.createElement('input');input.className='quantity-input';input.type='text';input.inputMode='numeric';input.autocomplete='off';input.setAttribute('aria-label','組數輸入');input.setAttribute('enterkeyhint','next');
-  input.onfocus=()=>{setFocus('qty');save()};
-  const consume=()=>{
-    const digits=input.value.replace(/[０-９]/g,c=>String(c.charCodeAt(0)-0xff10)).replace(/\D/g,'');
-    input.value='';
-    for(const digit of digits)inputDigit(digit);
-  };
-  input.oninput=e=>{if(!e.isComposing)consume()};
-  input.oncompositionend=consume;
-  input.onbeforeinput=e=>{if(e.inputType==='deleteContentBackward'){e.preventDefault();backspaceFresh()}};
-  display.appendChild(input);body.appendChild(display);
-  fitDisplay(display,text.textContent);
+  if(state.fresh.mode!=='tian'&&(state.game==='539'||state.fresh.mode!=='car')){
+    const display=document.createElement('div');display.id='freshDisplay';display.className='number-display'+(state.fresh.focus==='qty'?' focused':'');
+    const text=document.createElement('span');text.textContent=freshDisplay();display.appendChild(text);
+    const input=document.createElement('input');input.className='quantity-input';input.type='text';input.inputMode='numeric';input.autocomplete='off';input.setAttribute('aria-label','組數輸入');input.setAttribute('enterkeyhint','next');
+    input.onfocus=()=>{setFocus('qty');save()};
+    const consume=()=>{
+      const digits=input.value.replace(/[０-９]/g,c=>String(c.charCodeAt(0)-0xff10)).replace(/\D/g,'');
+      input.value='';
+      for(const digit of digits)inputDigit(digit);
+    };
+    input.oninput=e=>{if(!e.isComposing)consume()};
+    input.oncompositionend=consume;
+    input.onbeforeinput=e=>{if(e.inputType==='deleteContentBackward'){e.preventDefault();backspaceFresh()}};
+    display.appendChild(input);body.appendChild(display);
+    fitDisplay(display,text.textContent);
+  }
   const actions=document.createElement('div');actions.className='actions';
-  actions.innerHTML='<button>退一碼</button><button class="danger">清空</button><button>確認／下一欄</button><button class="primary">＋ 加入清單</button>';
-  actions.children[0].onclick=()=>backspaceFresh();actions.children[1].onclick=()=>clearInput('new');body.appendChild(actions);
-  actions.children[2].onclick=enterAction;actions.children[3].onclick=()=>submit('new');
+  if(state.fresh.mode==='tian'||(state.game==='49'&&state.fresh.mode==='car')){
+    actions.innerHTML='<button class="danger">清空</button><button class="primary">＋ 加入清單</button>';
+    actions.children[0].onclick=()=>clearInput('new');actions.children[1].onclick=()=>submit('new');
+  }else{
+    actions.innerHTML='<button>退一碼</button><button class="danger">清空</button><button>確認／下一欄</button><button class="primary">＋ 加入清單</button>';
+    actions.children[0].onclick=()=>backspaceFresh();actions.children[1].onclick=()=>clearInput('new');
+    actions.children[2].onclick=enterAction;actions.children[3].onclick=()=>submit('new');
+  }
+  body.appendChild(actions);
   const stars=freshPriceStars();
   const priceSection=document.createElement('div');priceSection.className='section';
   if(state.fresh.mode==='car'){
-    priceSection.innerHTML='<div class="section-title">車／化雙價格（百元）</div>';
+    priceSection.innerHTML=`<div class="section-title">${state.game==='539'?'車／化雙':'全車'}價格（百元）</div>`;
     const carPrices=document.createElement('div');carPrices.className='car-price-grid';
     carPrices.appendChild(carPriceEditor('車','var(--purple)',()=>state.fresh.carPrice,value=>state.fresh.carPrice=value,'fresh-car-price',false));
-    carPrices.appendChild(carPriceEditor('化雙','var(--green)',()=>state.fresh.doublePrice,value=>state.fresh.doublePrice=value,'fresh-double-price',freshDoubleBets()===0));
+    if(state.game==='539')carPrices.appendChild(carPriceEditor('化雙','var(--green)',()=>state.fresh.doublePrice,value=>state.fresh.doublePrice=value,'fresh-double-price',freshDoubleBets()===0));
     priceSection.appendChild(carPrices);
+  }else if(state.fresh.mode==='tian'){
+    priceSection.innerHTML='<div class="section-title">天二／天三／天四價格（百元）</div>';
+    priceSection.appendChild(priceEditor(state.fresh.tianPrices,tianBets(state.fresh.specialCount,state.fresh.regularCount),'fresh-tian-price',true));
   }else{
     priceSection.innerHTML='<div class="section-title">各星價格（百元）</div>';
     priceSection.appendChild(priceEditor(state.fresh.prices,stars,'fresh-price',true));
@@ -734,7 +798,15 @@ function refreshNewInput(){
   ensurePanelFits(panelEl);
   applyKeyboardMode();
 }
-function resetFreshMode(mode){state.fresh.mode=mode;state.fresh.pending='';state.fresh.pair=null;state.fresh.columns=[];state.fresh.doubleCount=null;state.fresh.focus='qty';save();refreshNewInput()}
+function switchGame(game){
+  if(game===state.game)return;
+  state.gameFresh[state.game]=clone(state.fresh);
+  state.game=game;
+  state.fresh=clone(state.gameFresh[game]||defaults.fresh);
+  if(game==='539'&&state.fresh.mode==='tian')state.fresh.mode='pair';
+  save();render();focusCurrentQuantity();
+}
+function resetFreshMode(mode){state.fresh.mode=mode;state.fresh.pending='';state.fresh.pair=null;state.fresh.columns=[];state.fresh.doubleCount=null;state.fresh.focus=mode==='tian'?'tian-special':'qty';save();refreshNewInput()}
 function freshDisplay(){
   const f=state.fresh;
   if(f.mode==='pair')return f.pending||f.pair||'--';
@@ -743,7 +815,7 @@ function freshDisplay(){
 }
 function fitDisplay(el,text){const n=text.length,base=n>65?19:n>45?23:n>30?28:n>20?34:n>12?42:52;el.style.fontSize=base*state.fontScale+'px'}
 function freshStars(){
-  if(state.fresh.mode==='pair')return starsForPair(state.fresh.pair||+state.fresh.pending||0,state.fresh.maxStar);
+  if(state.fresh.mode==='pair')return starsForPair(clamp(state.fresh.pair||+state.fresh.pending,0,GAMES[state.game].max,0),state.fresh.maxStar);
   if(state.fresh.mode==='car')return {};
   return starsForPillar(state.fresh.columns.slice(),state.fresh.maxStar);
 }
@@ -757,9 +829,14 @@ function freshPriceStars(){
 function renderCalculated(){
   const stars=freshPriceStars(),note=document.getElementById('freshCompact');
   if(note)note.innerHTML=compactStars(stars);
+  if(state.fresh.mode==='tian')for(const [key,count] of Object.entries(tianBets(state.fresh.specialCount,state.fresh.regularCount))){
+    const input=document.getElementById('fresh-tian-price-'+key);
+    if(input){input.disabled=count===0;input.placeholder=count===0?'無法成立':'輸入價格';input.parentElement.classList.toggle('disabled',count===0)}
+  }
 }
 function compactStars(stars){
-  if(state.fresh.mode==='car')return`<span style="color:var(--purple)">車 <b>固定38注</b></span>　<span style="color:var(--green)">化雙 <b>${fmt(freshDoubleBets())}注</b>（選${freshDoubleCount()}個號碼）</span>`;
+  if(state.fresh.mode==='tian')return Object.entries(tianBets(state.fresh.specialCount,state.fresh.regularCount)).map(([key,count])=>`<span style="color:${TIAN_COLORS[key]}">${TIAN_NAMES[key]} <b>${fmt(count)}注</b></span>`).join('　');
+  if(state.fresh.mode==='car')return`<span style="color:var(--purple)">全車 <b>固定${GAMES[state.game].car}注</b></span>${state.game==='539'?`　<span style="color:var(--green)">化雙 <b>${fmt(freshDoubleBets())}注</b>（選${freshDoubleCount()}個號碼）</span>`:''}`;
   return Object.keys(stars).map(Number).map(r=>`<span style="color:${COLORS[r]}">${NAMES[r]} <b>${stars[r]||0}</b>柱</span>`).join('　');
 }
 function summary(stars,unit){
@@ -774,25 +851,39 @@ function actionRow(label,onAdd,onClear){
 
 function submit(kind){
   let item;
+  if(state.fresh.mode==='pair'&&+state.fresh.pending>GAMES[state.game].max)return alert(`連碰最多${GAMES[state.game].max}個號碼`);
+  if(state.fresh.mode==='pillar'&&state.fresh.columns.reduce((sum,n)=>sum+(+n||0),0)+(+state.fresh.pending||0)>GAMES[state.game].max)return alert(`立柱號碼總數不得超過${GAMES[state.game].max}`);
   commitFreshPending();
-  if(state.fresh.mode==='pair'&&!state.fresh.pair)return alert('請先輸入連碰組數');
-  if(state.fresh.mode==='pillar'&&state.fresh.columns.length<2)return alert('至少需要2柱非零');
-  if(state.fresh.mode==='car'){
-    const doubleBets=doublesFor(state.fresh.doubleCount);
-    item={type:'car',desc:`車固定38注／化雙選${state.fresh.doubleCount||0}個號碼`,stars:{car:38,...(doubleBets?{double:doubleBets}:{})},starPrices:{car:state.fresh.carPrice,...(doubleBets?{double:state.fresh.doublePrice}:{})}};
+  if(state.fresh.mode==='tian'){
+    const t=+state.fresh.specialCount,g=+state.fresh.regularCount;
+    if(!t||!g||t+g>49||t>49||g>49)return alert('特號與正碼至少各1個，合計不得超過49個');
+    const stars=tianBets(t,g);
+    item={type:'tian',desc:`天地碰 特號${t}個／正碼${g}個`,stars,starPrices:{...state.fresh.tianPrices}};
   }else{
-    const stars=freshStars();
-    item={type:state.fresh.mode==='pair'?'lp':'pi',desc:state.fresh.mode==='pair'?`連碰 ${state.fresh.pair}個`:`立柱 ${state.fresh.columns.join('×')}`,stars,starPrices:{...state.fresh.prices}};
+    if(state.fresh.mode==='pair'&&!state.fresh.pair)return alert('請先輸入連碰組數');
+    if(state.fresh.mode==='pair'&&state.fresh.pair>GAMES[state.game].max)return alert(`連碰最多${GAMES[state.game].max}個號碼`);
+    if(state.fresh.mode==='pillar'&&state.fresh.columns.length<2)return alert('至少需要2柱非零');
+    if(state.fresh.mode==='pillar'&&state.fresh.columns.reduce((sum,n)=>sum+(+n||0),0)>GAMES[state.game].max)return alert(`立柱號碼總數不得超過${GAMES[state.game].max}`);
+    if(state.fresh.mode==='car'){
+      const doubleBets=state.game==='539'?doublesFor(state.fresh.doubleCount):0;
+      item={type:'car',desc:state.game==='539'?`全車固定38注／化雙選${state.fresh.doubleCount||0}個號碼`:'全車固定48注',stars:{car:GAMES[state.game].car,...(doubleBets?{double:doubleBets}:{})},starPrices:{car:state.fresh.carPrice,...(doubleBets?{double:state.fresh.doublePrice}:{})}};
+    }else{
+      const stars=freshStars();
+      item={type:state.fresh.mode==='pair'?'lp':'pi',desc:state.fresh.mode==='pair'?`連碰 ${state.fresh.pair}個`:`立柱 ${state.fresh.columns.join('×')}`,stars,starPrices:{...state.fresh.prices}};
+    }
   }
-  state.fresh.pending='';state.fresh.pair=null;state.fresh.columns=[];state.fresh.doubleCount=null;state.fresh.prices={};state.fresh.carPrice='';state.fresh.doublePrice='';state.fresh.focus='qty';
+  item.game=state.game;
+  state.fresh.pending='';state.fresh.pair=null;state.fresh.columns=[];state.fresh.doubleCount=null;state.fresh.specialCount='';state.fresh.regularCount='';state.fresh.focus=state.fresh.mode==='tian'?'tian-special':'qty';
   item.id=state.nextId++;state.list.push(item);state.totalMultipliers={};save();render();focusCurrentQuantity();showStatus(`已加入清單，目前 ${state.list.length} 筆`);
 }
 function clearInput(kind){
-  Object.assign(state.fresh,{pending:'',pair:null,columns:[],doubleCount:null,prices:{},carPrice:'',doublePrice:'',focus:'qty'});
+  Object.assign(state.fresh,{pending:'',pair:null,columns:[],doubleCount:null,specialCount:'',regularCount:'',focus:state.fresh.mode==='tian'?'tian-special':'qty'});
   save();render();focusCurrentQuantity();
 }
 function commitFreshPending(){
+  if(state.fresh.mode==='tian')return false;
   const n=+state.fresh.pending;if(!n)return false;
+  if(state.fresh.mode==='pillar'&&(n>GAMES[state.game].max||state.fresh.columns.reduce((sum,value)=>sum+(+value||0),0)+n>GAMES[state.game].max))return false;
   if(state.fresh.mode==='pair')state.fresh.pair=n;
   else if(state.fresh.mode==='car')state.fresh.doubleCount=clamp(n,0,39,0);
   else{
@@ -865,7 +956,7 @@ function focusWithoutScroll(target){
 }
 function focusCurrentQuantity(){
   requestAnimationFrame(()=>{
-    focusWithoutScroll(document.getElementById('freshDisplay'));
+    focusWithoutScroll(document.getElementById(state.fresh.mode==='tian'?'tian-special':state.game==='49'&&state.fresh.mode==='car'?'fresh-car-price':'freshDisplay'));
   });
 }
 
@@ -873,7 +964,8 @@ function totals(){
   const rawByStar={},byStar={};let grand=0;
   state.list.forEach(item=>Object.entries(item.stars||{}).forEach(([r,count])=>{
     const value=amountHundred(+count,item.starPrices?.[r]);
-    if(value!==null)rawByStar[r]=(rawByStar[r]||0)+value;
+    const key=gameKey(item.game||'539',r);
+    if(value!==null)rawByStar[key]=(rawByStar[key]||0)+value;
   }));
   Object.entries(rawByStar).forEach(([r,value])=>{
     byStar[r]=value*normalizedMultiplier(state.totalMultipliers?.[r]);
@@ -882,7 +974,7 @@ function totals(){
   return{rawByStar,byStar,grand};
 }
 function buildTotalMultiplierEditor(){
-  const stars=[...new Set(state.list.flatMap(item=>Object.keys(item.stars||{})))].sort(metricSort);
+  const stars=[...new Set(state.list.flatMap(item=>Object.keys(item.stars||{}).map(key=>gameKey(item.game||'539',key))))].sort(metricSort);
   const box=document.createElement('div');box.className='total-multipliers';
   if(!stars.length)return box;
   stars.forEach(r=>{
@@ -925,13 +1017,13 @@ function buildTotalTable(){
   const wrap=document.createElement('div');
   if(!state.list.length){wrap.innerHTML='<div class="empty">尚無資料</div>';return wrap}
   const {byStar,grand}=totals();
-  const stars=[...new Set(state.list.flatMap(x=>Object.keys(x.stars||{})))].sort(metricSort);
+  const stars=[...new Set(state.list.flatMap(x=>Object.keys(x.stars||{}).map(key=>gameKey(x.game||'539',key))))].sort(metricSort);
   wrap.innerHTML=`<div class="total-grand"><span>總金額</span><span>${fmt(grand)} 元</span></div>
     <div class="total-head"><span class="cell-index">合</span>${stars.map(r=>`<span class="cell-star" style="color:${metricColor(r)}">${fmt(byStar[r]||0)}</span>`).join('')}<span style="width:24px"></span></div>
     <div class="total-row"><span class="cell-index">#</span>${stars.map(r=>`<span class="cell-star" style="color:${metricColor(r)}">${metricName(r)}</span>`).join('')}<span style="width:24px"></span></div>`;
   state.list.forEach((item,index)=>{
     const row=document.createElement('div');row.className='total-row';
-    row.innerHTML=`<span class="cell-index">${index+1}</span>${stars.map(r=>{const v=amountHundred(item.stars?.[r]||0,item.starPrices?.[r]);return`<span class="cell-star" style="color:${v===null?'var(--muted)':metricColor(r)}">${v===null?'—':fmt(v)}</span>`}).join('')}<button class="delete">×</button>`;
+    row.innerHTML=`<span class="cell-index">${index+1}</span>${stars.map(r=>{const [game,kind]=splitGameKey(r),v=game===(item.game||'539')?amountHundred(item.stars?.[kind]||0,item.starPrices?.[kind]):null;return`<span class="cell-star" style="color:${v===null?'var(--muted)':metricColor(r)}">${v===null?'—':fmt(v)}</span>`}).join('')}<button class="delete">×</button>`;
     row.querySelector('button').onclick=()=>deleteItem(item.id);wrap.appendChild(row);
   });
   return wrap;
@@ -957,15 +1049,16 @@ function renderList(){
   if(!count)totalsBox.innerHTML='<div class="empty">尚無資料</div>';
   else{
     const {byStar,grand}=totals();
+    const categories=[...new Set(state.list.flatMap(item=>Object.keys(item.stars||{}).map(key=>gameKey(item.game||'539',key))))].sort(metricSort);
     totalsBox.innerHTML=`<div class="list-total-row"><b>總金額</b><b>${fmt(grand)} 元</b></div>`+
-      Object.keys(byStar).sort(metricSort).map(r=>`<div class="list-total-row"><span style="color:${metricColor(r)}">${metricName(r)}</span><span>${fmt(byStar[r])} ${metricUnit(r)}</span></div>`).join('');
+      categories.map(r=>`<div class="list-total-row"><span style="color:${metricColor(r)}">${metricName(r)}</span><span>${fmt(byStar[r]||0)} ${metricUnit(r)}</span></div>`).join('');
   }
   const details=document.getElementById('listDetails');details.innerHTML='';
   if(!count){details.innerHTML='<div class="empty">尚未加入任何組合</div>';return}
   state.list.forEach(item=>{
     const row=document.createElement('div');row.className='list-item';
-    const typeName=item.type==='pi'?'立柱':item.type==='car'?'車':'連碰';
-    row.innerHTML=`<div class="list-main"><span class="tag ${item.type}">${typeName}</span><div class="desc">${item.desc}</div><div class="details">${Object.entries(item.stars||{}).map(([r,n])=>{const price=item.starPrices?.[r],amount=amountYuan(n,price);return`<span style="color:${metricColor(r)}">${metricName(r)}</span> ${n}注${amount===null?'':` × ${price} = ${fmt(amount)}元`}`}).join('<br>')||'缺少明細'}</div></div><button class="delete">×</button>`;
+    const typeName=item.type==='pi'?'立柱':item.type==='car'?'全車':item.type==='tian'?'天地碰':'連碰';
+    row.innerHTML=`<div class="list-main"><span class="tag ${item.type}">${item.game||'539'} ${typeName}</span><div class="desc">${item.desc}</div><div class="details">${Object.entries(item.stars||{}).map(([r,n])=>{const price=item.starPrices?.[r],amount=amountYuan(n,price),key=gameKey(item.game||'539',r);return`<span style="color:${metricColor(key)}">${metricName(key)}</span> ${n}注${amount===null?'':` × ${price} = ${fmt(amount)}元`}`}).join('<br>')||'缺少明細'}</div></div><button class="delete">×</button>`;
     row.querySelector('button').onclick=()=>deleteItem(item.id);details.appendChild(row);
   });
 }
@@ -1194,10 +1287,12 @@ function render(){
 
 function inputDigit(d){
   if(state.page==='new'&&state.fresh.focus==='qty'){
+    if(state.game==='49'&&state.fresh.mode==='car')return false;
     if(state.fresh.mode==='pillar'){
       const digit=+d;
       if(state.fresh.pillarDigits!=='double'){
         if(digit>=1){
+          if(state.fresh.columns.reduce((sum,value)=>sum+(+value||0),0)+digit>GAMES[state.game].max){showStatus(`最多${GAMES[state.game].max}個號碼`);return true}
           state.fresh.columns.push(String(digit));
           state.fresh.pending='';
           save();refreshNewInput();focusCurrentQuantity();
@@ -1206,18 +1301,22 @@ function inputDigit(d){
       }
       state.fresh.pending=(state.fresh.pending+d).slice(-2);
       if(state.fresh.pending.length>=2){
+        if(+state.fresh.pending>GAMES[state.game].max||state.fresh.columns.reduce((sum,value)=>sum+(+value||0),0)+(+state.fresh.pending)>GAMES[state.game].max){state.fresh.pending=state.fresh.pending.slice(0,1);showStatus(`最多${GAMES[state.game].max}個號碼`);save();refreshNewInput();return true}
         commitFreshPending();
         save();refreshNewInput();focusCurrentQuantity();
         return true;
       }
       save();refreshNewInput();return true;
     }
-    state.fresh.pending=(state.fresh.pending+d).slice(-2);save();refreshNewInput();return true;
+    const pending=(state.fresh.pending+d).slice(-2),max=state.fresh.mode==='car'?39:GAMES[state.game].max;
+    if(+pending>max){showStatus(`最多${max}個號碼`);return true}
+    state.fresh.pending=pending;save();refreshNewInput();return true;
   }
   return false;
 }
 function enterAction(){
   if(state.page==='new'){
+    if(state.fresh.mode==='tian'){focusWithoutScroll(document.getElementById('tian-special'));return}
     if(state.fresh.focus==='qty'){
       if(state.fresh.mode==='pillar'||state.fresh.mode==='car'){
         if(commitFreshPending()&&state.fresh.mode==='pillar'){save();refreshNewInput();return}
@@ -1232,12 +1331,19 @@ function enterAction(){
   }
 }
 function cyclePriceFocus(){
+  if(state.fresh.mode==='tian'){
+    const current=TIAN_KEYS.indexOf(state.fresh.focus.slice('fresh-tian-price-'.length));
+    const next=TIAN_KEYS.slice(current+1).map(key=>document.getElementById('fresh-tian-price-'+key)).find(input=>input&&!input.disabled)?.id||'tian-special';
+    state.fresh.focus=next;save();focusWithoutScroll(document.getElementById(next));
+    return;
+  }
   const isCar=state.fresh.mode==='car';
   if(isCar){
     const current=state.fresh.focus;
     const carId='fresh-car-price';
     const doubleId='fresh-double-price';
     if(current===carId){
+      if(state.game==='49'){focusWithoutScroll(document.getElementById(carId));return}
       state.fresh.focus=doubleId;
       save();focusWithoutScroll(document.getElementById(doubleId));return;
     }

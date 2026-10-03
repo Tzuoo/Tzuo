@@ -77,7 +77,7 @@ h1{margin:0 0 8px;text-align:center;font-size:16px;color:var(--title)}
 .mode-row,.control-row,.price-row,.actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .game-row{display:flex;gap:6px;margin-bottom:8px}
 .game-row .mode-btn{min-width:0}
-.tian-counts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin:8px 0}
+.tian-counts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin:8px 0}
 .tian-counts label{display:flex;flex-direction:column;gap:4px;text-align:center;color:var(--muted);font-size:12px;font-weight:700}
 .tian-counts input{width:100%;min-width:0;padding:9px;border:1px solid var(--line);border-radius:8px;background:var(--field);color:var(--on-control);text-align:center}
 .mode-btn{flex:1;min-width:100px;padding:10px;border:1px solid var(--line);border-radius:9px;background:var(--button);color:var(--muted);font-weight:800}
@@ -325,7 +325,7 @@ const defaults={
   shortcutVersion:2,
   shortcuts:DEFAULT_SHORTCUTS,
   fresh:{
-    mode:'pair',focus:'qty',pending:'',pair:null,columns:[],doubleCount:null,maxStar:4,pillarDigits:'single',prices:{2:'',3:'',4:''},carPrice:'',doublePrice:'',specialCount:'',regularCount:'',tianDigits:'double',maxHeaven:4,tianPrices:{heaven2:'',heaven3:'',heaven4:''}
+    mode:'pair',focus:'qty',pending:'',pair:null,columns:[],doubleCount:null,maxStar:4,pillarDigits:'single',prices:{2:'',3:'',4:''},carPrice:'',doublePrice:'',specialCount:'',regularCount:'',overlapCount:'',tianDigits:'double',maxHeaven:4,tianPrices:{heaven2:'',heaven3:'',heaven4:''}
   }
 };
 
@@ -369,12 +369,20 @@ function doublesFor(count){
   const n=clamp(count,0,39,0);
   return Math.round(n*(39-n)*(38-n)/2);
 }
-function tianBets(special,regular){
-  const t=clamp(special,0,49,0),g=clamp(regular,0,49,0);
-  return{heaven2:t*g,heaven3:t*combination(g,2),heaven4:t*combination(g,3)};
+function tianBets(special,regular,overlap=0){
+  const t=clamp(special,0,49,0),g=clamp(regular,0,49,0),o=clamp(overlap,0,Math.min(t,g),0);
+  return{
+    heaven2:Math.max(0,t*g-o),
+    heaven3:Math.max(0,t*combination(g,2)-o*combination(g-1,1)),
+    heaven4:Math.max(0,t*combination(g,3)-o*combination(g-1,2))
+  };
+}
+function tianOverlap(){
+  const t=+state.fresh.specialCount||0,g=+state.fresh.regularCount||0,raw=String(state.fresh.overlapCount??'');
+  return raw===''?(t>0&&t===g?t:0):clamp(raw,0,Math.min(t,g),0);
 }
 function visibleTianBets(){
-  const all=tianBets(state.fresh.specialCount,state.fresh.regularCount);
+  const all=tianBets(state.fresh.specialCount,state.fresh.regularCount,tianOverlap());
   return Object.fromEntries(TIAN_KEYS.slice(0,clamp(state.fresh.maxHeaven,2,4,4)-1).map(key=>[key,all[key]]));
 }
 function gameKey(game,key){return `${game}:${key}`}
@@ -643,7 +651,7 @@ function tianDigitControl(){
     button.onclick=()=>{
       if(state.fresh.tianDigits===button.dataset.mode)return;
       state.fresh.tianDigits=button.dataset.mode;
-      state.fresh.specialCount='';state.fresh.regularCount='';state.fresh.focus='tian-special';
+      state.fresh.specialCount='';state.fresh.regularCount='';state.fresh.overlapCount='';state.fresh.focus='tian-special';
       save();refreshNewInput();focusWithoutScroll(document.getElementById('tian-special'));
     };
   });
@@ -734,26 +742,38 @@ function buildNewBody(){
     body.appendChild(cards);
     if(state.game==='539'){const label=document.createElement('div');label.className='section-title';label.textContent='化雙選號數（1～39）';body.appendChild(label)}
   }else{
-    const heading=document.createElement('div');heading.className='section-title';heading.textContent='天地碰：特號數 T 與正碼數 G（T＋G 不超過49）';body.appendChild(heading);
+    const heading=document.createElement('div');heading.className='section-title';heading.textContent='天地碰：特號 T、正碼 G、兩邊重複號碼 O（不同號碼合計不超過49）';body.appendChild(heading);
     const controls=document.createElement('div');controls.className='control-row section';
     controls.appendChild(directControl('顯示至天',state.fresh.maxHeaven,2,4,v=>{state.fresh.maxHeaven=v;save();refreshNewInput()}));
     controls.appendChild(tianDigitControl());body.appendChild(controls);
     const counts=document.createElement('div');counts.className='tian-counts';
-    counts.innerHTML=`<label>特號數 T<input id="tian-special" inputmode="numeric" maxlength="${state.fresh.tianDigits==='single'?1:2}" autocomplete="off" value="${state.fresh.specialCount}" aria-label="特號數 T"></label><label>正碼數 G<input id="tian-regular" inputmode="numeric" maxlength="${state.fresh.tianDigits==='single'?1:2}" autocomplete="off" value="${state.fresh.regularCount}" aria-label="正碼數 G"></label>`;
-    for(const [id,field] of [['tian-special','specialCount'],['tian-regular','regularCount']]){
+    const overlapDisplay=state.fresh.overlapCount!==''?state.fresh.overlapCount:(+state.fresh.specialCount>0&&+state.fresh.specialCount===+state.fresh.regularCount?state.fresh.specialCount:'');
+    counts.innerHTML=`<label>特號數 T<input id="tian-special" inputmode="numeric" maxlength="${state.fresh.tianDigits==='single'?1:2}" autocomplete="off" value="${state.fresh.specialCount}" aria-label="特號數 T"></label><label>正碼數 G<input id="tian-regular" inputmode="numeric" maxlength="${state.fresh.tianDigits==='single'?1:2}" autocomplete="off" value="${state.fresh.regularCount}" aria-label="正碼數 G"></label><label>重複數 O<input id="tian-overlap" inputmode="numeric" maxlength="${state.fresh.tianDigits==='single'?1:2}" autocomplete="off" value="${overlapDisplay}" aria-label="重複號碼數 O"></label>`;
+    for(const [id,field] of [['tian-special','specialCount'],['tian-regular','regularCount'],['tian-overlap','overlapCount']]){
       const fieldInput=counts.querySelector('#'+id);
       const update=()=>{
         const single=state.fresh.tianDigits==='single';
         const digits=fieldInput.value.replace(/[０-９]/g,c=>String(c.charCodeAt(0)-0xff10)).replace(/\D/g,'').slice(0,single?1:2);
-        const other=+(state.fresh[id==='tian-special'?'regularCount':'specialCount'])||0;
-        fieldInput.value=digits?String(Math.min(+digits,single?9:48,49-other)):'';
+        const isOverlap=id==='tian-overlap',max=isOverlap?Math.min(+state.fresh.specialCount||0,+state.fresh.regularCount||0):(single?9:49);
+        fieldInput.value=digits?String(Math.min(+digits,max)):'';
         state.fresh[field]=fieldInput.value;save();renderCalculated();
-        if(+fieldInput.value>0&&(single||digits.length===2))focusWithoutScroll(document.getElementById(id==='tian-special'?'tian-regular':'fresh-tian-price-heaven2'));
+        if(!isOverlap){
+          const overlap=document.getElementById('tian-overlap'),limit=Math.min(+state.fresh.specialCount||0,+state.fresh.regularCount||0);
+          if(state.fresh.overlapCount!==''&&+state.fresh.overlapCount>limit)state.fresh.overlapCount=String(limit);
+          if(overlap)overlap.value=state.fresh.overlapCount!==''?state.fresh.overlapCount:(limit>0&&+state.fresh.specialCount===+state.fresh.regularCount?String(limit):'');
+          save();renderCalculated();
+        }
+        const complete=single?digits.length===1:digits.length===2;
+        if((isOverlap||+fieldInput.value>0)&&complete){
+          let next=id==='tian-special'?'tian-regular':id==='tian-regular'?'tian-overlap':'fresh-tian-price-heaven2';
+          if(id==='tian-regular'&&state.fresh.overlapCount===''&&+state.fresh.specialCount>0&&+state.fresh.specialCount===+state.fresh.regularCount)next='fresh-tian-price-heaven2';
+          focusWithoutScroll(document.getElementById(next));
+        }
       };
       fieldInput.oninput=e=>{if(!e.isComposing)update()};
       fieldInput.oncompositionend=update;
       fieldInput.onfocus=()=>{state.fresh.focus=id;save();fieldInput.select()};
-      fieldInput.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();focusWithoutScroll(document.getElementById(id==='tian-special'?'tian-regular':'fresh-tian-price-heaven2'))}};
+      fieldInput.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();focusWithoutScroll(document.getElementById(id==='tian-special'?'tian-regular':id==='tian-regular'?'tian-overlap':'fresh-tian-price-heaven2'))}};
     }
     body.appendChild(counts);
   }
@@ -886,10 +906,10 @@ function submit(kind){
   if(state.fresh.mode==='pillar'&&state.fresh.columns.reduce((sum,n)=>sum+(+n||0),0)+(+state.fresh.pending||0)>GAMES[state.game].max)return alert(`立柱號碼總數不得超過${GAMES[state.game].max}`);
   commitFreshPending();
   if(state.fresh.mode==='tian'){
-    const t=+state.fresh.specialCount,g=+state.fresh.regularCount;
-    if(!t||!g||t+g>49||t>49||g>49)return alert('特號與正碼至少各1個，合計不得超過49個');
+    const t=+state.fresh.specialCount,g=+state.fresh.regularCount,o=tianOverlap();
+    if(!t||!g||t>49||g>49||o>Math.min(t,g)||t+g-o>49)return alert('特號與正碼至少各1個；重複數不可超過任一邊，且不同號碼合計不得超過49個');
     const stars=visibleTianBets();
-    item={type:'tian',desc:`天地碰 特號${t}個／正碼${g}個`,stars,starPrices:Object.fromEntries(Object.keys(stars).map(key=>[key,state.fresh.tianPrices[key]]))};
+    item={type:'tian',desc:`天地碰 特號${t}個／正碼${g}個${o?`／重複${o}個`:''}`,stars,starPrices:Object.fromEntries(Object.keys(stars).map(key=>[key,state.fresh.tianPrices[key]]))};
   }else{
     if(state.fresh.mode==='pair'&&!state.fresh.pair)return alert('請先輸入連碰組數');
     if(state.fresh.mode==='pair'&&state.fresh.pair>GAMES[state.game].max)return alert(`連碰最多${GAMES[state.game].max}個號碼`);
@@ -909,11 +929,11 @@ function submit(kind){
     state.fresh.carPrice='';
     if(state.game==='539')state.fresh.doublePrice='';
   }else Object.keys(state.fresh.prices).forEach(key=>state.fresh.prices[key]='');
-  state.fresh.pending='';state.fresh.pair=null;state.fresh.columns=[];state.fresh.doubleCount=null;state.fresh.specialCount='';state.fresh.regularCount='';state.fresh.focus=state.fresh.mode==='tian'?'tian-special':'qty';
+  state.fresh.pending='';state.fresh.pair=null;state.fresh.columns=[];state.fresh.doubleCount=null;state.fresh.specialCount='';state.fresh.regularCount='';state.fresh.overlapCount='';state.fresh.focus=state.fresh.mode==='tian'?'tian-special':'qty';
   item.id=state.nextId++;state.list.push(item);state.totalMultipliers={};save();render();focusCurrentQuantity();showStatus(`已加入清單，目前 ${state.list.length} 筆`);
 }
 function clearInput(kind){
-  Object.assign(state.fresh,{pending:'',pair:null,columns:[],doubleCount:null,specialCount:'',regularCount:'',focus:state.fresh.mode==='tian'?'tian-special':'qty'});
+  Object.assign(state.fresh,{pending:'',pair:null,columns:[],doubleCount:null,specialCount:'',regularCount:'',overlapCount:'',focus:state.fresh.mode==='tian'?'tian-special':'qty'});
   save();render();focusCurrentQuantity();
 }
 function commitFreshPending(){

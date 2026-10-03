@@ -870,7 +870,7 @@ function switchGame(game){
   if(game==='539'&&state.fresh.mode==='tian')state.fresh.mode='pair';
   save();render();focusCurrentQuantity();
 }
-function resetFreshMode(mode){state.fresh.mode=mode;state.fresh.pending='';state.fresh.pair=null;state.fresh.columns=[];state.fresh.doubleCount=null;state.fresh.focus=mode==='tian'?'tian-special':'qty';save();refreshNewInput()}
+function resetFreshMode(mode){state.fresh.mode=mode;state.fresh.pending='';state.fresh.pair=null;state.fresh.columns=[];state.fresh.doubleCount=null;state.fresh.focus=mode==='tian'?'tian-special':'qty';save();refreshNewInput();focusWithoutScroll(document.getElementById(mode==='tian'?'tian-special':'freshDisplay'))}
 function freshDisplay(){
   const f=state.fresh;
   if(f.mode==='pair')return f.pending||f.pair||'--';
@@ -1269,7 +1269,7 @@ function handleCalculatorKey(e){
 }
 
 function keySignature(e){
-  if(e.code==='LaunchApp2'||['LaunchApplication2','Calculator'].includes(e.key))return'LaunchApp2';
+  if(['LaunchApp1','LaunchApp2','ContextMenu'].includes(e.code)||['LaunchApplication1','LaunchApplication2','Calculator'].includes(e.key)||[93,182,183,210].includes(e.keyCode)||(e.code==='Unidentified'&&e.key==='Unidentified'))return'LaunchApp2';
   const parts=[];
   if(e.ctrlKey)parts.push('Ctrl');
   if(e.altKey)parts.push('Alt');

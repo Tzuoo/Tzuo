@@ -83,6 +83,7 @@ h1{margin:0 0 8px;text-align:center;font-size:16px;color:var(--title)}
 .tian-counts input{width:100%;min-width:0;padding:9px;border:1px solid var(--line);border-radius:8px;background:var(--field);color:var(--on-control);text-align:center}
 .mode-btn{flex:1;min-width:100px;padding:10px;border:1px solid var(--line);border-radius:9px;background:var(--button);color:var(--muted);font-weight:800}
 .mode-btn.active{border-color:var(--yellow);color:var(--on-control);box-shadow:0 0 0 2px rgba(251,191,36,.15)}
+.tian-overlap-toggle{flex:0 0 auto;min-width:64px;padding:7px 10px}
 .mode-row.four-modes .mode-btn{min-width:0;flex:1 1 0;padding:9px 3px}
 .control{display:flex;align-items:center;border:1px solid var(--line);border-radius:18px;overflow:hidden;background:var(--panel2)}
 .control button{width:30px;height:30px;border:0;background:transparent;color:var(--on-control)}
@@ -381,7 +382,7 @@ function tianBets(special,regular,overlap=0){
 function tianOverlap(){
   if(!state.fresh.showOverlap)return 0;
   const t=+state.fresh.specialCount||0,g=+state.fresh.regularCount||0,raw=String(state.fresh.overlapCount??'');
-  return raw===''?(t>0&&t===g?t:0):clamp(raw,0,Math.min(t,g),0);
+  return raw===''?0:clamp(raw,0,Math.min(t,g),0);
 }
 function visibleTianBets(){
   const all=tianBets(state.fresh.specialCount,state.fresh.regularCount,tianOverlap());
@@ -660,20 +661,14 @@ function tianDigitControl(){
   return wrap;
 }
 function tianOverlapControl(){
-  const wrap=document.createElement('div');wrap.className='control';
-  wrap.innerHTML='<span>重號</span><button data-show="false">不用</button><button data-show="true">使用</button>';
-  wrap.querySelectorAll('button').forEach(button=>{
-    const show=button.dataset.show==='true',active=show===state.fresh.showOverlap;
-    button.style.background=active?'var(--accent)':'transparent';
-    button.style.color=active?'#fff':'var(--on-control)';
-    button.onclick=()=>{
-      if(state.fresh.showOverlap===show)return;
-      state.fresh.showOverlap=show;state.fresh.overlapCount='';
-      save();refreshNewInput();
-      focusWithoutScroll(document.getElementById(show?'tian-overlap':'tian-special'));
-    };
-  });
-  return wrap;
+  const button=document.createElement('button');button.className='mode-btn tian-overlap-toggle'+(state.fresh.showOverlap?' active':'');
+  button.textContent='重號';button.setAttribute('aria-pressed',String(state.fresh.showOverlap));
+  button.onclick=()=>{
+    state.fresh.showOverlap=!state.fresh.showOverlap;state.fresh.overlapCount='';
+    const show=state.fresh.showOverlap;save();refreshNewInput();
+    focusWithoutScroll(document.getElementById(show?'tian-overlap':'tian-special'));
+  };
+  return button;
 }
 function priceEditor(prices,stars,prefix,disableZero=false){
   const box=document.createElement('div');box.className='price-editor-grid';
@@ -765,7 +760,7 @@ function buildNewBody(){
     controls.appendChild(directControl('顯示至天',state.fresh.maxHeaven,2,4,v=>{state.fresh.maxHeaven=v;save();refreshNewInput()}));
     controls.appendChild(tianDigitControl());controls.appendChild(tianOverlapControl());body.appendChild(controls);
     const counts=document.createElement('div');counts.className='tian-counts'+(state.fresh.showOverlap?' with-overlap':'');
-    const overlapDisplay=state.fresh.overlapCount!==''?state.fresh.overlapCount:(+state.fresh.specialCount>0&&+state.fresh.specialCount===+state.fresh.regularCount?state.fresh.specialCount:'');
+    const overlapDisplay=state.fresh.overlapCount;
     counts.innerHTML=`<label>特號數 T<input id="tian-special" inputmode="numeric" maxlength="${state.fresh.tianDigits==='single'?1:2}" autocomplete="off" value="${state.fresh.specialCount}" aria-label="特號數 T"></label><label>正碼數 G<input id="tian-regular" inputmode="numeric" maxlength="${state.fresh.tianDigits==='single'?1:2}" autocomplete="off" value="${state.fresh.regularCount}" aria-label="正碼數 G"></label>${state.fresh.showOverlap?`<label>重複數 O<input id="tian-overlap" inputmode="numeric" maxlength="${state.fresh.tianDigits==='single'?1:2}" autocomplete="off" value="${overlapDisplay}" aria-label="重複號碼數 O"></label>`:''}`;
     const countFields=[['tian-special','specialCount'],['tian-regular','regularCount'],...(state.fresh.showOverlap?[["tian-overlap","overlapCount"]]:[])];
     for(const [id,field] of countFields){
@@ -779,13 +774,12 @@ function buildNewBody(){
         if(!isOverlap){
           const overlap=document.getElementById('tian-overlap'),limit=Math.min(+state.fresh.specialCount||0,+state.fresh.regularCount||0);
           if(state.fresh.overlapCount!==''&&+state.fresh.overlapCount>limit)state.fresh.overlapCount=String(limit);
-          if(overlap)overlap.value=state.fresh.overlapCount!==''?state.fresh.overlapCount:(limit>0&&+state.fresh.specialCount===+state.fresh.regularCount?String(limit):'');
+          if(overlap)overlap.value=state.fresh.overlapCount;
           save();renderCalculated();
         }
         const complete=single?digits.length===1:digits.length===2;
         if((isOverlap||+fieldInput.value>0)&&complete){
           let next=id==='tian-special'?'tian-regular':id==='tian-regular'&&state.fresh.showOverlap?'tian-overlap':'fresh-tian-price-heaven2';
-          if(id==='tian-regular'&&state.fresh.showOverlap&&state.fresh.overlapCount===''&&+state.fresh.specialCount>0&&+state.fresh.specialCount===+state.fresh.regularCount)next='fresh-tian-price-heaven2';
           focusWithoutScroll(document.getElementById(next));
         }
       };

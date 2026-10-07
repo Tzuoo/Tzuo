@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         anime收藏
 // @namespace    https://anime1.me/
-// @version      2.9.6
+// @version      2.9.7
 // @updateURL    https://raw.githubusercontent.com/Tzuoo/Tzuo/main/%E6%B2%B9%E7%8C%B4%E8%85%B3%E6%9C%AC/anime%E6%94%B6%E8%97%8F.user.js
 // @downloadURL  https://raw.githubusercontent.com/Tzuoo/Tzuo/main/%E6%B2%B9%E7%8C%B4%E8%85%B3%E6%9C%AC/anime%E6%94%B6%E8%97%8F.user.js
 // @description  Anime1 multi-source intro/outro skipping and automatic next episode.
@@ -631,6 +631,7 @@
   const defaults = {
     statusHotkey: "n",
     settingsHotkey: "ctrl+shift+n",
+    nextEpisodeHotkey: "shift+n",
     skipEnabled: true,
     animeSkipClientId: "",
     autoplayAfterJump: true,
@@ -2054,7 +2055,7 @@
     button.id = "anime-skip-next-episode";
     button.type = "button";
     button.textContent = "▶ 下一集";
-    button.title = "前往下一集";
+    button.title = `前往下一集（快捷鍵：${config.nextEpisodeHotkey}）`;
     button.addEventListener("click", () => goToNext(adapter.getNextUrl()));
     document.body.appendChild(button);
     return true;
@@ -2142,6 +2143,7 @@
     const adjust = loadAdjust();
     const iStatus = mkInput("text", config.statusHotkey); hotkeyInput(iStatus);
     const iSettings = mkInput("text", config.settingsHotkey); hotkeyInput(iSettings);
+    const iNextEpisode = mkInput("text", config.nextEpisodeHotkey); hotkeyInput(iNextEpisode);
     const iSkipEnabled = mkInput("checkbox", config.skipEnabled);
     const iAnimeSkipClientId = mkInput("password", config.animeSkipClientId, { autocomplete: "off", placeholder: "留空則不使用 Anime Skip" });
     const iIntroOffset = mkInput("number", adjust.introOffset, { min: -120, max: 120, step: 0.5 });
@@ -2154,6 +2156,7 @@
       heading("快捷鍵"),
       field("顯示當前作品狀態", iStatus),
       field("開啟設定", iSettings),
+      field("前往下一集", iNextEpisode),
       heading("跳過資料來源"),
       check("啟用自動跳過片頭/片尾", iSkipEnabled),
       field("Anime Skip Client ID（本機儲存，可留空）", iAnimeSkipClientId),
@@ -2177,12 +2180,15 @@
       config = {
         statusHotkey: normalizeHotkey(iStatus.value) || defaults.statusHotkey,
         settingsHotkey: normalizeHotkey(iSettings.value) || defaults.settingsHotkey,
+        nextEpisodeHotkey: normalizeHotkey(iNextEpisode.value) || defaults.nextEpisodeHotkey,
         skipEnabled: iSkipEnabled.checked,
         animeSkipClientId: iAnimeSkipClientId.value.trim(),
         autoplayAfterJump: iAutoplay.checked,
         jumpWhenEnded: iJumpEnded.checked,
       };
       saveConfig(config);
+      const nextButton = document.getElementById("anime-skip-next-episode");
+      if (nextButton) nextButton.title = `前往下一集（快捷鍵：${config.nextEpisodeHotkey}）`;
       saveAdjust({
         introOffset: iIntroOffset.value,
         outroOffset: iOutroOffset.value,
@@ -2285,6 +2291,7 @@
       const map = [
         [config.settingsHotkey, openSettings],
         [config.statusHotkey, () => showCurrentStatus().catch(err => alert(`查詢失敗：${err.message || err}`))],
+        [config.nextEpisodeHotkey, () => goToNext(adapter.getNextUrl())],
       ];
       for (const [key, fn] of map) {
         if (hk === normalizeHotkey(key)) {

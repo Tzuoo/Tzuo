@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         禁漫天堂
 // @namespace    codex.local
-// @version      5.3.0
+// @version      5.3.1
 // @updateURL    https://raw.githubusercontent.com/Tzuoo/Tzuo/main/%E6%B2%B9%E7%8C%B4%E8%85%B3%E6%9C%AC/%E7%A6%81%E6%BC%AB%E5%A4%A9%E5%A0%82.user.js
 // @downloadURL  https://raw.githubusercontent.com/Tzuoo/Tzuo/main/%E6%B2%B9%E7%8C%B4%E8%85%B3%E6%9C%AC/%E7%A6%81%E6%BC%AB%E5%A4%A9%E5%A0%82.user.js
 // @description  禁漫天堂帳號漫畫收藏書架，保留每部作品最新收藏並自動清理舊集收藏。
@@ -14,7 +14,7 @@
 (() => {
   'use strict';
 
-  const LIBRARY_CACHE_KEY = 'jm-reader-library-cache-v6';
+  const LIBRARY_CACHE_KEY = 'jm-reader-library-cache-v7';
   const LIBRARY_CACHE_TTL = 10 * 60 * 1000;
   const LIBRARY_REFRESH_DELAYS = [1200, 3200];
   const COMPLETED_KEY_PREFIX = 'jm-library-completed-v1:';
@@ -239,7 +239,7 @@
   }
 
   function normalizeSeriesTitle(title) {
-    return String(title)
+    const key = String(title)
       .normalize('NFKC')
       // 只統一已知字形差異，不用部分標題或模糊比對刪除收藏。
       .replace(/獵/g, '猎')
@@ -251,6 +251,18 @@
       )
       .replace(/[\s\-_／/]+/g, '')
       .toLowerCase();
+    return canonicalSeriesKey(key);
+  }
+
+  function canonicalSeriesKey(key) {
+    // 使用者確認 photo/1453521（90話）與 photo/1248468（64話）為同作。
+    // 僅對這組完整別名及其重複標題做對應，不採模糊前綴刪除。
+    const aliases = ['缺德鄰居麥相害', '缺德鄰居難相處', '缺德鄰居難相处',
+      '缺德邻居麦相害', '缺德邻居难相处'];
+    if (aliases.includes(key) || aliases.some(a => aliases.some(b => key === a + b))) {
+      return '缺德鄰居難相处';
+    }
+    return key;
   }
 
   function extractChapterNumber(title) {
@@ -267,7 +279,7 @@
   function readCompletedTitles() {
     try {
       const value = JSON.parse(localStorage.getItem(completionStorageKey()) || '[]');
-      return new Set(Array.isArray(value) ? value.filter(key => typeof key === 'string') : []);
+      return new Set(Array.isArray(value) ? value.filter(key => typeof key === 'string').map(canonicalSeriesKey) : []);
     } catch { return new Set(); }
   }
 

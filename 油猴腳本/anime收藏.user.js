@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         anime收藏
 // @namespace    https://anime1.me/
-// @version      2.9.5
+// @version      2.9.6
 // @updateURL    https://raw.githubusercontent.com/Tzuoo/Tzuo/main/%E6%B2%B9%E7%8C%B4%E8%85%B3%E6%9C%AC/anime%E6%94%B6%E8%97%8F.user.js
 // @downloadURL  https://raw.githubusercontent.com/Tzuoo/Tzuo/main/%E6%B2%B9%E7%8C%B4%E8%85%B3%E6%9C%AC/anime%E6%94%B6%E8%97%8F.user.js
 // @description  Anime1 multi-source intro/outro skipping and automatic next episode.
@@ -1773,6 +1773,15 @@
         background:rgba(25,25,25,.92);color:#fff;
         font:14px system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
       }
+      #anime-skip-next-episode {
+        position:fixed;right:18px;bottom:18px;z-index:2147483646;
+        min-height:38px;border:1px solid rgba(255,255,255,.3);border-radius:8px;padding:8px 13px;
+        background:rgba(20,20,20,.88);color:#fff;cursor:pointer;
+        font:600 14px system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+        box-shadow:0 4px 16px rgba(0,0,0,.28);
+      }
+      #anime-skip-next-episode:hover { background:rgba(22,119,255,.94); }
+      #anime-skip-next-episode:focus-visible { outline:2px solid #fff;outline-offset:2px; }
       .anime-skip-popup {
         position:absolute;right:18px;bottom:68px;z-index:2147483647;
         display:flex;align-items:center;gap:8px;border-radius:8px;padding:8px 10px;
@@ -2035,6 +2044,31 @@
     video.addEventListener("ended", onEnded);
     video.addEventListener("play", cancelTimer);
     video.addEventListener("seeking", cancelTimer);
+  }
+
+  function mountNextEpisodeButton() {
+    if (document.getElementById("anime-skip-next-episode")) return true;
+    if (!adapter.getNextUrl()) return false;
+    injectStyles();
+    const button = document.createElement("button");
+    button.id = "anime-skip-next-episode";
+    button.type = "button";
+    button.textContent = "▶ 下一集";
+    button.title = "前往下一集";
+    button.addEventListener("click", () => goToNext(adapter.getNextUrl()));
+    document.body.appendChild(button);
+    return true;
+  }
+
+  function wireNextEpisodeButton() {
+    if (mountNextEpisodeButton()) return;
+    const observer = new MutationObserver(() => {
+      if (mountNextEpisodeButton()) observer.disconnect();
+    });
+    observer.observe(document.documentElement, { childList: true, subtree: true });
+    window.addEventListener("load", () => {
+      if (mountNextEpisodeButton()) observer.disconnect();
+    }, { once: true });
   }
 
   function wireVideos() {
@@ -2336,5 +2370,6 @@
   wireHotkeys();
   wireAgePrompt();
   wireVideos();
+  wireNextEpisodeButton();
   tryAutoplayIfRequested();
 })();

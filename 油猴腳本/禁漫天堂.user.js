@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         禁漫天堂
 // @namespace    codex.local
-// @version      5.3.1
+// @version      5.4.0
 // @updateURL    https://raw.githubusercontent.com/Tzuoo/Tzuo/main/%E6%B2%B9%E7%8C%B4%E8%85%B3%E6%9C%AC/%E7%A6%81%E6%BC%AB%E5%A4%A9%E5%A0%82.user.js
 // @downloadURL  https://raw.githubusercontent.com/Tzuoo/Tzuo/main/%E6%B2%B9%E7%8C%B4%E8%85%B3%E6%9C%AC/%E7%A6%81%E6%BC%AB%E5%A4%A9%E5%A0%82.user.js
 // @description  禁漫天堂帳號漫畫收藏書架，保留每部作品最新收藏並自動清理舊集收藏。
@@ -14,7 +14,9 @@
 (() => {
   'use strict';
 
-  const LIBRARY_CACHE_KEY = 'jm-reader-library-cache-v7';
+  const LIBRARY_CACHE_KEY = 'jm-reader-library-cache-v8';
+  const SERIES_CACHE_KEY = 'jm-library-official-series-v1';
+  const SERIES_CACHE_TTL = 24 * 60 * 60 * 1000;
   const LIBRARY_CACHE_TTL = 10 * 60 * 1000;
   const LIBRARY_REFRESH_DELAYS = [1200, 3200];
   const COMPLETED_KEY_PREFIX = 'jm-library-completed-v1:';
@@ -284,7 +286,80 @@
   }
 
   function completionKey(item) {
-    return normalizeSeriesTitle(item.title) || `album:${item.id}`;
+    return item.seriesId ? `series:${item.seriesId}` : normalizeSeriesTitle(item.title) || `album:${item.id}`;
+  }
+
+  function extractOfficialSeries(doc, expectedId) {
+    // 只讀網站資料，絕不執行頁面內的 JavaScript。
+    const source = [...doc.querySelectorAll('script:not([src])')]
+      .map(node => node.textContent || '').find(text => /\bvar\s+series_id\s*=/.test(text) && /\bvar\s+aid\s*=/.test(text));
+    if (!source) return null;
+    const value = name => (source.match(new RegExp(`\\bvar\\s+${name}\\s*=\\s*(\\d+(?:\\.\\d+)?)\\s*;`)) || [])[1];
+    const seriesId = value('series_id'), aid = value('aid'), sort = Number(value('sort'));
+    const hidden = doc.querySelector('input#series_id')?.getAttribute('value');
+    if (!seriesId || seriesId === '0' || aid !== String(expectedId) || !(sort > 0) || (hidden && hidden !== seriesId)) return null;
+    const chapters = [...doc.querySelectorAll('.series_drop a.series_drop_item[href]')].map(link => {
+      try {
+        const url = new URL(link.getAttribute('href'), location.origin);
+        const id = url.pathname.match(/^\/photo\/(\d+)\/?$/)?.[1];
+        return url.origin === location.origin && id ? id : null;
+      } catch { return null; }
+    });
+    // 僅清單順序與本頁官方 sort 相符時，才將清單順序共用給其他章節。
+    const listValid = chapters.length > 0 && chapters.every(Boolean) &&
+      new Set(chapters).size === chapters.length && chapters.indexOf(aid) + 1 === sort;
+    return { seriesId, sort, chapters: listValid ? chapters : [] };
+  }
+
+  async function resolveOfficialFavorites(items) {
+    let cache = {};
+    try { cache = JSON.parse(localStorage.getItem(SERIES_CACHE_KEY) || '{}') || {}; } catch {}
+    const resolved = new Map();
+    const valid = entry => entry && /^\d+$/.test(entry.seriesId) && Number(entry.sort) > 0 &&
+      Number(entry.savedAt) > Date.now() - SERIES_CACHE_TTL;
+    for (const item of items) {
+      if (resolved.has(item.id)) continue;
+      if (valid(cache[item.id])) { resolved.set(item.id, cache[item.id]); continue; }
+      try {
+        const doc = await fetchDocument(`/photo/${item.id}`);
+        const info = extractOfficialSeries(doc, item.id);
+        if (!info) continue;
+        const savedAt = Date.now();
+        const remember = (id, sort) => {
+          const entry = { seriesId: info.seriesId, sort, savedAt };
+          // 相互矛盾的官方對應不可自動合併。
+          if (valid(cache[id]) && cache[id].seriesId !== info.seriesId) {
+            resolved.set(id, null); delete cache[id]; return;
+          }
+          cache[id] = entry; resolved.set(id, entry);
+        };
+        remember(item.id, info.sort);
+        info.chapters.forEach((id, index) => remember(id, index + 1));
+      } catch { /* 查詢失敗的收藏保留，下一次重新嘗試。 */ }
+    }
+    cache = Object.fromEntries(Object.entries(cache).filter(([, entry]) => valid(entry)).slice(-2000));
+    try { localStorage.setItem(SERIES_CACHE_KEY, JSON.stringify(cache)); } catch {}
+    return items.map(item => {
+      const info = resolved.get(item.id);
+      return { ...item, seriesId: info?.seriesId || '', seriesSort: Number(info?.sort) || 0,
+        seriesKey: info ? `series:${info.seriesId}` : `album:${item.id}` };
+    });
+  }
+
+  function migrateCompletedSeries(username, items) {
+    const key = COMPLETED_KEY_PREFIX + encodeURIComponent(username);
+    try {
+      const original = JSON.parse(localStorage.getItem(key) || '[]');
+      if (!Array.isArray(original)) return;
+      const completed = new Set(original.filter(value => typeof value === 'string').map(canonicalSeriesKey));
+      for (const item of items) {
+        const oldKey = normalizeSeriesTitle(item.title);
+        if (item.seriesId && completed.has(oldKey)) {
+          completed.add(`series:${item.seriesId}`); completed.delete(oldKey);
+        }
+      }
+      localStorage.setItem(key, JSON.stringify([...completed]));
+    } catch { /* 儲存不可用時不清除原分類。 */ }
   }
 
   function extractAlbums(doc) {
@@ -336,65 +411,38 @@
 
       seen.add(match[1]);
 
-      const seriesSort =
-        extractChapterNumber(title) || Number(url.searchParams.get('series_sort')) || 0;
-
       return [{
         id: match[1],
         title,
         url: `/photo/${match[1]}`,
-        seriesSort,
+        seriesSort: 0,
         index,
-        seriesKey:
-          normalizeSeriesTitle(title) ||
-          `album:${match[1]}`
+        seriesKey: `album:${match[1]}`
       }];
     });
 
-    const newestBySeries = new Map();
+    return { favorites: items, obsoleteIds: [] };
+  }
+
+  function selectNewestOfficial(items) {
+    const highestBySeries = new Map();
     const obsoleteIds = [];
-
     for (const item of items) {
-      const current =
-        newestBySeries.get(item.seriesKey);
-
-      if (!current) {
-        newestBySeries.set(
-          item.seriesKey,
-          item
-        );
-      } else if (
-        item.seriesSort > 0 &&
-        current.seriesSort > 0 &&
-        item.seriesSort > current.seriesSort
-      ) {
-        obsoleteIds.push(current.id);
-
-        newestBySeries.set(
-          item.seriesKey,
-          item
-        );
-      } else if (
-        item.seriesSort > 0 &&
-        current.seriesSort > 0 &&
-        item.seriesSort < current.seriesSort
-      ) {
-        obsoleteIds.push(item.id);
-      } else {
-        // 無法確認話數先後時，保留兩筆，不隱藏或刪除。
-        newestBySeries.set(`album:${item.id}`, item);
+      if (item.seriesId && item.seriesSort > 0) {
+        highestBySeries.set(item.seriesId, Math.max(highestBySeries.get(item.seriesId) || 0, item.seriesSort));
       }
     }
-
-    const favorites = [
-      ...newestBySeries.values()
-    ]
+    const favorites = items.filter(item => {
+      const obsolete = item.seriesId && item.seriesSort > 0 && item.seriesSort < highestBySeries.get(item.seriesId);
+      if (obsolete) obsoleteIds.push(item.id);
+      return !obsolete;
+    })
       .sort((a, b) => a.index - b.index)
       .map(
         ({
-          seriesKey,
-          seriesSort,
-          index,
+          seriesKey: _seriesKey,
+          seriesSort: _seriesSort,
+          index: _index,
           ...item
         }) => item
       );
@@ -535,8 +583,19 @@
         );
       }
 
-      const extracted =
-        extractAlbums(favoritesDoc);
+      const rawItems = extractAlbums(favoritesDoc).favorites;
+      // 先顯示收藏，再於背景核對官方關聯；核對期間移除按鈕保持停用。
+      libraryData = { username, favorites: rawItems };
+      libraryLoaded = true;
+      renderLibrary();
+      const officialItems = await resolveOfficialFavorites(rawItems);
+      migrateCompletedSeries(username, officialItems);
+      const extracted = selectNewestOfficial(officialItems);
+
+      // 清理前再核對帳號；失敗時不執行刪除。
+      if (extracted.obsoleteIds.length && extractUsername(await fetchDocument('/user/')) !== username) {
+        throw new Error('登入帳號已改變，請重新整理後再操作');
+      }
 
       const removedCount =
         await removeObsoleteFavorites(
@@ -562,6 +621,7 @@
 
     } catch (error) {
 
+      libraryNotice = `更新失敗：${error?.message || String(error)}`;
       if (!libraryLoaded) {
         libraryData = {
           username: '',

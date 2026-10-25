@@ -1,16 +1,17 @@
 // ==UserScript==
 // @name         巴哈問答
 // @namespace    https://tzuoo.github.io/Tzuo/
-// @version      1.7.14
+// @version      1.8.1
 // @updateURL    https://raw.githubusercontent.com/Tzuoo/Tzuo/main/%E6%B2%B9%E7%8C%B4%E8%85%B3%E6%9C%AC/%E5%B7%B4%E5%93%88%E5%95%8F%E7%AD%94.user.js
 // @downloadURL  https://raw.githubusercontent.com/Tzuoo/Tzuo/main/%E6%B2%B9%E7%8C%B4%E8%85%B3%E6%9C%AC/%E5%B7%B4%E5%93%88%E5%95%8F%E7%AD%94.user.js
-// @description  Bahamut Anime daily quiz helper.
+// @description  動畫瘋每日問答、簽到與雙倍巴幣，保留原有片頭片尾與跳集功能。
 // @author       tzuoo
 // @match        https://ani.gamer.com.tw/*
 // @grant        GM_registerMenuCommand
 // @grant        GM_xmlhttpRequest
 // @grant        GM_getValue
 // @grant        GM_setValue
+// @grant        unsafeWindow
 // @run-at       document-idle
 // @connect      api.aniskip.com
 // @connect      api.anime-skip.com
@@ -2324,3 +2325,318 @@
   ensureGamerQuizAnswered().catch(() => {});
   restoreViewingMode();
 })();
+
+
+// <baha-daily-rewards-v1>
+(function () {
+  "use strict";
+function createBahaDailyRewards(io) {
+  const flag = value => value === true || value === 1 || value === "1" ? true :
+    value === false || value === 0 || value === "0" ? false : null;
+
+  function statusOf(response) {
+    if (response?.error || !response?.data) throw new Error("網站未能確認簽到狀態");
+    const signed = flag(response.data.signin);
+    const double = flag(response.data.finishedAd);
+    if (signed === null) throw new Error("網站簽到資料格式已改變");
+    return { signed, double };
+  }
+  async function guard(scope) {
+    if (await io.scope() !== scope || io.day() !== scope.split(":")[0]) {
+      throw new Error("帳號或日期已變更，請重新整理後再試");
+    }
+  }
+  function read(scope) {
+    return { scope, signed: null, double: null, ...(io.read(scope) || {}) };
+  }
+  async function save(scope, record) {
+    await guard(scope);
+    io.write(scope, record);
+    return record;
+  }
+  async function notice(scope, record, message) {
+    if (!io.config().dailyNotice || record.notified) return record;
+    record.notified = true;
+    await save(scope, record);
+    io.notify(message);
+    return record;
+  }
+  function describe(record) {
+    if (record.error) return record.error;
+    if (record.state === "conflict") return "請先停用「巴哈自動簽到」擴充，再重新整理";
+    if (record.state === "awaiting-ad") return "已簽到；請依網站提示觀看廣告以領取雙倍巴幣";
+    if (record.state === "deferred") return "已簽到；請從油猴選單手動開始雙倍巴幣廣告";
+    if (record.signed === true && record.double === true) return "今日已簽到，雙倍巴幣已領取";
+    if (record.signed === true) return "今日已簽到；雙倍巴幣尚未確認領取";
+    return "今日尚未簽到";
+  }
+
+  async function run({ manual = false } = {}) {
+    await io.ready();
+    const scope = await io.scope();
+    if (!scope) return { state: "logged-out" };
+    const cfg = io.config();
+    if (!manual && !cfg.autoSign && !cfg.autoDouble) return { state: "disabled" };
+    return io.lock(async () => {
+      await guard(scope);
+      let record = read(scope);
+      if (io.conflict()) {
+        record.state = "conflict";
+        await save(scope, record);
+        await notice(scope, record, describe(record));
+        return record;
+      }
+      if (!manual && record.autoAttempted) return record;
+      // Persist BEFORE any request. A failed attempt needs an explicit menu retry.
+      record.autoAttempted = true;
+      record.error = "";
+      record.state = "checking";
+      await save(scope, record);
+      try {
+        let status = statusOf(await io.status());
+        await guard(scope);
+        Object.assign(record, status);
+        if (!status.signed && (cfg.autoSign || manual)) {
+          await guard(scope);
+          if (io.conflict()) throw new Error("偵測到另一個自動簽到擴充，已停止");
+          const result = await io.sign();
+          if (result?.error) throw new Error("簽到提交未成功；請查看網站或手動重試");
+          // A POST result alone is never treated as confirmation.
+          status = statusOf(await io.status());
+          await guard(scope);
+          Object.assign(record, status);
+          if (!status.signed) throw new Error("提交後仍未確認簽到；請手動檢查");
+        }
+        record.state = "checked";
+        if (record.signed && record.double !== true && (cfg.autoDouble || manual)) {
+          if (record.double === null) throw new Error("網站未提供雙倍巴幣狀態，未開始廣告");
+          if (Number(record.rewardPendingUntil || 0) > io.now()) {
+            record.state = "awaiting-ad";
+          } else if (io.rewardBusy() || !io.canStartReward()) {
+            record.state = "deferred";
+          } else if (!record.rewardAttempted || manual) {
+            // The site owns ad playback and reward completion; never simulate completion.
+            record.rewardAttempted = true;
+            record.rewardPendingUntil = io.now() + 10 * 60 * 1000;
+            record.state = "awaiting-ad";
+            await save(scope, record);
+            await guard(scope);
+            if (io.conflict()) throw new Error("偵測到另一個自動簽到擴充，已停止");
+            await io.startReward();
+          }
+        }
+      } catch (error) {
+        await guard(scope); // Do not save results under a different account or day.
+        record.state = "error";
+        record.error = String(error?.message || "簽到檢查失敗，請手動重試");
+      }
+      await save(scope, record);
+      await notice(scope, record, describe(record));
+      return record;
+    });
+  }
+
+  async function inspect() {
+    await io.ready();
+    const scope = await io.scope();
+    if (!scope) return { state: "logged-out" };
+    return io.lock(async () => {
+      await guard(scope);
+      const record = read(scope);
+      const status = statusOf(await io.status());
+      await guard(scope);
+      Object.assign(record, status, { error: "", state: "checked" });
+      if (status.double === true) record.rewardPendingUntil = 0;
+      return save(scope, record);
+    });
+  }
+  return { run, inspect, describe };
+}
+
+  const CONFIG = "bahaDailyRewards.config.v1";
+  const RECORDS = "bahaDailyRewards.records.v1";
+  const DEFAULTS = { autoSign: true, autoDouble: true, dailyNotice: true };
+  const page = typeof unsafeWindow === "object" ? unsafeWindow : window;
+  const sleepDaily = ms => new Promise(resolve => setTimeout(resolve, ms));
+  const readValue = (key, fallback) => {
+    if (typeof GM_getValue === "function") return GM_getValue(key, fallback);
+    const raw = localStorage.getItem(key);
+    return raw === null ? fallback : JSON.parse(raw);
+  };
+  const writeValue = (key, value) => {
+    if (typeof GM_setValue === "function") GM_setValue(key, value);
+    else localStorage.setItem(key, JSON.stringify(value));
+    if (JSON.stringify(readValue(key, null)) !== JSON.stringify(value)) {
+      throw new Error("無法儲存每日紀錄，未執行自動操作");
+    }
+  };
+  const dailyConfig = () => ({ ...DEFAULTS, ...(readValue(CONFIG, {}) || {}) });
+  // Web Locks and this synchronous same-origin ledger share one consistency
+  // boundary. GM values are cached separately in each running userscript tab.
+  const readRecords = () => {
+    const raw = localStorage.getItem(RECORDS);
+    if (raw !== null) return JSON.parse(raw);
+    // Preserve attempts made by a locally installed 1.8.0 before this update.
+    const previous = readValue(RECORDS, {}) || {};
+    localStorage.setItem(RECORDS, JSON.stringify(previous));
+    if (localStorage.getItem(RECORDS) !== JSON.stringify(previous)) {
+      throw new Error("無法儲存每日紀錄，未執行自動操作");
+    }
+    return previous;
+  };
+  const writeRecords = records => {
+    const raw = JSON.stringify(records);
+    localStorage.setItem(RECORDS, raw);
+    if (localStorage.getItem(RECORDS) !== raw) {
+      throw new Error("無法儲存每日紀錄，未執行自動操作");
+    }
+  };
+  const day = () => {
+    const parts = new Intl.DateTimeFormat("en", {
+      timeZone: "Asia/Taipei", year: "numeric", month: "2-digit", day: "2-digit"
+    }).formatToParts(new Date());
+    const value = type => parts.find(part => part.type === type).value;
+    return value("year") + "-" + value("month") + "-" + value("day");
+  };
+  const scope = async () => {
+    if (!page.User?.Login?.isLogin?.()) return null;
+    const id = String(page.User.Login.getUserid?.() || "");
+    if (!id) return null;
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(id));
+    const accountHash = Array.from(new Uint8Array(digest), n => n.toString(16).padStart(2, "0")).join("");
+    return day() + ":" + accountHash;
+  };
+  const toast = message => {
+    document.getElementById("baha-daily-rewards-toast")?.remove();
+    const box = document.createElement("div");
+    box.id = "baha-daily-rewards-toast";
+    box.textContent = message;
+    box.style.cssText = "position:fixed;right:18px;bottom:70px;z-index:2147483647;max-width:420px;padding:13px 17px;background:#25333b;color:white;border-radius:10px;font:14px/1.6 system-ui;box-shadow:0 3px 18px #0006";
+    document.body?.append(box);
+    setTimeout(() => box.remove(), 6500);
+  };
+  async function withTimeout(operation) {
+    let timer;
+    try {
+      return await Promise.race([
+        Promise.resolve().then(operation),
+        new Promise((_, reject) => {
+          timer = setTimeout(() => reject(new Error("網站回應逾時；未重複提交，可稍後手動檢查")), 20000);
+        })
+      ]);
+    } finally { clearTimeout(timer); }
+  }
+  const controller = createBahaDailyRewards({
+    day, scope, now: () => Date.now(), config: dailyConfig, notify: toast,
+    ready: async () => {
+      for (let i = 0; i < 30; i++) {
+        if (page.User?.Login && page.Signin?.checkSigninStatus && page.Signin?.signinWork) return;
+        await sleepDaily(500);
+      }
+      throw new Error("網站簽到程式尚未就緒，請重新整理");
+    },
+    read: key => readRecords()[key] || null,
+    write: (key, record) => {
+      const all = { ...readRecords(), [key]: record };
+      const recent = Object.fromEntries(Object.entries(all).sort(([a], [b]) => a.localeCompare(b)).slice(-14));
+      writeRecords(recent);
+    },
+    lock: action => {
+      if (!navigator.locks?.request) throw new Error("瀏覽器未提供分頁鎖，已停止自動提交");
+      return navigator.locks.request("codex-baha-daily-rewards.v1", { mode: "exclusive" }, action);
+    },
+    conflict: () => !!document.querySelector("#baha-auto-sign"),
+    status: () => withTimeout(() => page.Signin.checkSigninStatus.call(page.Signin)),
+    sign: () => withTimeout(() => page.Signin.signinWork.call(page.Signin)),
+    rewardBusy: () => !!document.querySelector("dialog.dialogify__adsPopup[open]") ||
+      Array.from(document.querySelectorAll("video")).some(video => !video.paused && !video.ended),
+    canStartReward: () => document.visibilityState === "visible" &&
+      typeof page.SigninAd?.initAd === "function" &&
+      typeof page.SigninAd?.startAd === "function" &&
+      typeof page.googletag?.pubads === "function" &&
+      typeof page.Bahamut?.Csrf === "function",
+    startReward: () => {
+      page.SigninAd.initAd.call(page.SigninAd);
+      page.SigninAd.startAd.call(page.SigninAd);
+    }
+  });
+
+  function showDailySettings() {
+    document.getElementById("baha-daily-rewards-settings")?.remove();
+    const dialog = document.createElement("dialog");
+    dialog.id = "baha-daily-rewards-settings";
+    dialog.style.cssText = "width:min(440px,85vw);border:1px solid #657782;border-radius:12px;padding:22px;background:#25333b;color:white;font:15px/1.7 system-ui";
+    const title = document.createElement("h3");
+    title.textContent = "巴哈問答：簽到與雙倍巴幣";
+    const form = document.createElement("form");
+    const cfg = dailyConfig(), inputs = {};
+    for (const [key, text] of [
+      ["autoSign", "進入動畫瘋時自動簽到"],
+      ["autoDouble", "每日最多自動開始一次雙倍巴幣廣告流程"],
+      ["dailyNotice", "每天最多顯示一次自動狀態提醒"]
+    ]) {
+      const label = document.createElement("label");
+      label.style.cssText = "display:block;margin:12px 0";
+      const input = document.createElement("input");
+      input.type = "checkbox"; input.checked = !!cfg[key]; inputs[key] = input;
+      label.append(input, document.createTextNode(" " + text)); form.append(label);
+    }
+    const hint = document.createElement("p");
+    hint.textContent = "雙倍巴幣由網站確認廣告完成。未登入、播放影片中或廣告無法載入時，可從油猴選單稍後手動重試。";
+    hint.style.fontSize = "13px";
+    const save = document.createElement("button");
+    save.type = "submit"; save.textContent = "儲存";
+    const cancel = document.createElement("button");
+    cancel.type = "button"; cancel.textContent = "關閉"; cancel.style.marginLeft = "12px";
+    cancel.addEventListener("click", () => dialog.remove());
+    form.append(hint, save, cancel);
+    form.addEventListener("submit", event => {
+      event.preventDefault();
+      try {
+        writeValue(CONFIG, Object.fromEntries(Object.entries(inputs).map(([key, input]) => [key, input.checked])));
+        dialog.remove(); toast("已儲存；可從油猴選單手動執行簽到與雙倍流程");
+      } catch (error) { toast(error.message); }
+    });
+    dialog.addEventListener("close", () => dialog.remove());
+    dialog.append(title, form); document.body.append(dialog); dialog.showModal();
+  }
+
+  const explain = record => record?.state === "logged-out" ? "尚未登入巴哈，請先自行登入" :
+    controller.describe(record);
+  if (typeof GM_registerMenuCommand === "function") {
+    GM_registerMenuCommand("簽到與雙倍巴幣設定", showDailySettings);
+    GM_registerMenuCommand("查看今日簽到與雙倍巴幣狀態", async () => {
+      try { alert(explain(await controller.inspect())); } catch (error) { alert(error.message); }
+    });
+    GM_registerMenuCommand("簽到／開始雙倍廣告（手動重試）", async () => {
+      try { toast(explain(await controller.run({ manual: true }))); } catch (error) { toast(error.message); }
+    });
+  }
+
+  // Only a completed SITE message triggers a read-only server verification.
+  // No ad-completion callback, reward-finished endpoint, or player is replaced.
+  const seenDialogs = new WeakSet();
+  let checkQueued = false;
+  const verifyCompletedReward = () => {
+    if (checkQueued) return;
+    for (const dialog of document.querySelectorAll("dialog.dialogify[open]")) {
+      if (seenDialogs.has(dialog)) continue;
+      const text = (dialog.querySelector(".dialogify__body")?.textContent || "").replace(/\s+/gu, "");
+      if (!["觀看廣告完成，獲得雙倍巴幣獎勵。", "您今天已經得到過雙倍巴幣獎勵囉！"].includes(text)) continue;
+      seenDialogs.add(dialog); checkQueued = true;
+      controller.inspect().catch(() => {}).finally(() => { checkQueued = false; });
+      break;
+    }
+  };
+  new MutationObserver(verifyCompletedReward).observe(document, {
+    childList: true, subtree: true, attributes: true, attributeFilter: ["open"]
+  });
+  const startDaily = () => controller.run().catch(() => {});
+  startDaily();
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") startDaily();
+  });
+
+
+})();
+// </baha-daily-rewards-v1>

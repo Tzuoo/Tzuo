@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         巴哈問答
 // @namespace    https://tzuoo.github.io/Tzuo/
-// @version      1.8.4
+// @version      1.8.5
 // @updateURL    https://raw.githubusercontent.com/Tzuoo/Tzuo/main/%E6%B2%B9%E7%8C%B4%E8%85%B3%E6%9C%AC/%E5%B7%B4%E5%93%88%E5%95%8F%E7%AD%94.user.js
 // @downloadURL  https://raw.githubusercontent.com/Tzuoo/Tzuo/main/%E6%B2%B9%E7%8C%B4%E8%85%B3%E6%9C%AC/%E5%B7%B4%E5%93%88%E5%95%8F%E7%AD%94.user.js
 // @description  動畫瘋每日問答、簽到與雙倍巴幣，保留原有片頭片尾與跳集功能。
@@ -2360,7 +2360,7 @@ SOFTWARE.
 // daily-service-begin
 function createBahaDailyService(io) {
   const { page, document, setTimer, clearTimer } = io;
-  let running = null, installed = false, complete = null, rewardScope = null;
+  let running = null, installed = false, complete = null, rewardScope = null, receiptScope = null;
   let state = { phase: "尚未檢查", signed: null, double: null, requests: {} };
   const update = patch => { state = { ...state, ...patch }; io.render(state); };
   const bool = value => value === true || value === 1 || value === "1";
@@ -2383,7 +2383,8 @@ function createBahaDailyService(io) {
       throw new Error("網站未能確認簽到狀態");
     }
     const known = [true,false,0,1,"0","1"].includes(result.data.finishedAd);
-    return { signed: bool(result.data.signin), double: known ? bool(result.data.finishedAd) : null };
+    return { signed: bool(result.data.signin), double: known ? bool(result.data.finishedAd) : null,
+      statusDouble: known ? bool(result.data.finishedAd) : null };
   }
   function installReward() {
     if (installed) return;
@@ -2400,8 +2401,11 @@ function createBahaDailyService(io) {
       if (message !== "是否觀看廣告？") return confirm.call(dialogs, message, options);
     };
     dialogs.alert = function (message) {
-      if (typeof message === "string" && (message.includes("觀看廣告完成") || message === "您今天已經得到過雙倍巴幣獎勵囉！")) {
-        emit({ phase: "網站已回報領取完成" }); return;
+      if (typeof message === "string" && message.includes("觀看廣告完成")) {
+        emit({ receipt: "completed" }); return;
+      }
+      if (message === "您今天已經得到過雙倍巴幣獎勵囉！") {
+        emit({ receipt: "already" }); return;
       }
       return alert.call(dialogs, message);
     };
@@ -2434,7 +2438,8 @@ function createBahaDailyService(io) {
         errorCode: /^[\w-]{1,30}$/u.test(String(data?.error?.code ?? "")) ? String(data.error.code) : null };
       update({ requests: { ...state.requests, [kind]: item } });
       if (item.http < 200 || item.http >= 300 || data?.error) emit({ error: "網站" + (kind === "start" ? "開始" : "完成") + "領取請求失敗（HTTP " + item.http + (item.errorCode ? "，代碼 " + item.errorCode : "") + "）" });
-      else if (kind === "finish" && [0,"0"].includes(item.finished)) emit({ error: "網站完成領取回應 finished=0，尚未發放雙倍巴幣" });
+      else if (kind === "start" && item.finished === 1) emit({ receipt: "already" });
+      else if (kind === "finish" && item.finished === 0) emit({ error: "網站完成領取回應 finished=0，尚未發放雙倍巴幣" });
     });
     installed = true;
   }
@@ -2458,7 +2463,8 @@ function createBahaDailyService(io) {
     finally { clearTimer(timer); complete = null; }
   }
   async function execute(manual) {
-    state = { phase: "檢查網站狀態", signed: null, double: null, requests: {} }; io.render(state);
+    state = { phase: "檢查網站狀態", signed: null, double: null, statusDouble: null, receipt: null, requests: {} };
+    receiptScope = null; io.render(state);
     const scope = await io.scope();
     if (!scope) { update({ phase: "尚未登入" }); return state; }
     return io.lock(async () => {
@@ -2478,10 +2484,17 @@ function createBahaDailyService(io) {
         if (state.signed && state.double === null && (manual || cfg.autoDouble)) throw new Error("網站未提供雙倍巴幣狀態，未執行領取");
         if (state.signed && state.double === false && (manual || cfg.autoDouble)) {
           const outcome = await reward(scope);
-          await guard(scope); update(await status()); await guard(scope);
-          if (state.double !== true) throw new Error(outcome.error || "網站仍顯示雙倍巴幣未領取");
+          await guard(scope);
+          if (outcome.receipt) {
+            // The original method treats its own already/completed response as
+            // final. A different signin.php flag must not overwrite that result.
+            receiptScope = scope; update({ double: true, receipt: outcome.receipt });
+          } else {
+            update(await status()); await guard(scope);
+            if (state.double !== true) throw new Error(outcome.error || "網站仍顯示雙倍巴幣未領取");
+          }
         }
-        update({ phase: state.double === true ? "今日已簽到，雙倍巴幣已領取" : state.signed ? "今日已簽到，雙倍巴幣尚未領取" : "今日尚未簽到" });
+        update({ phase: describe(), error: false });
       } catch (error) {
         update({ phase: String(error.message || error), error: true });
       }
@@ -2498,8 +2511,18 @@ function createBahaDailyService(io) {
       .finally(() => { running = null; });
     return running;
   }
+  function describe() {
+    if (state.receipt === "already") return "領取介面回覆：今天已領過雙倍巴幣";
+    if (state.receipt === "completed") return "領取介面回覆：雙倍巴幣領取完成";
+    return state.double === true ? "今日已簽到，雙倍巴幣已領取" : state.signed ? "今日已簽到，雙倍巴幣尚未領取" : "今日尚未簽到";
+  }
   async function inspect() {
-    try { update({ ...await status(), phase: "已重新查詢網站狀態", error: false }); }
+    try {
+      const scope = await io.scope(), latest = await status(); await guard(scope);
+      const keep = receiptScope === scope && !!state.receipt;
+      update({ ...latest, double: keep ? true : latest.double, receipt: keep ? state.receipt : null, error: false });
+      update({ phase: describe() });
+    }
     catch (error) { update({ phase: error.message, error: true }); }
     return state;
   }
@@ -2527,17 +2550,18 @@ function createBahaDailyService(io) {
   }
   function showDetails() {
     const state = service.getState();
-    alert("巴哈問答 1.8.4\n" + state.phase + "\n簽到：" + state.signed + "；雙倍：" + state.double +
+    alert("巴哈問答 1.8.5\n" + state.phase + "\n簽到：" + state.signed + "；領取判定：" + (state.receipt || state.double) +
+      "\n簽到查詢 finishedAd：" + state.statusDouble +
       "\n\n領取回應（沒有帳號或憑證）：\n" + JSON.stringify(state.requests, null, 2));
   }
   function render(state) {
     let panel = document.getElementById("baha-daily-rewards-status");
     if (!panel) {
       panel = document.createElement("div"); panel.id = "baha-daily-rewards-status";
-      panel.setAttribute("data-baha-version", "1.8.4");
+      panel.setAttribute("data-baha-version", "1.8.5");
       panel.style.cssText = "position:fixed;right:18px;bottom:18px;z-index:2147483646;max-width:420px;padding:9px 12px;background:#25333b;color:white;border:1px solid #657782;border-radius:8px;font:13px/1.5 system-ui";
       const text = document.createElement("div"); text.id = "baha-daily-rewards-phase";
-      const detail = document.createElement("button"); detail.textContent = "查看狀態（1.8.4）"; detail.addEventListener("click", showDetails);
+      const detail = document.createElement("button"); detail.textContent = "查看狀態（1.8.5）"; detail.addEventListener("click", showDetails);
       const retry = document.createElement("button"); retry.textContent = "重新領取";
       retry.addEventListener("click", () => service.run({ manual: true }));
       panel.append(text, detail, retry); document.body?.append(panel);

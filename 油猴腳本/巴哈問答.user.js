@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         巴哈問答
 // @namespace    https://tzuoo.github.io/Tzuo/
-// @version      1.8.2
+// @version      1.8.3
 // @updateURL    https://raw.githubusercontent.com/Tzuoo/Tzuo/main/%E6%B2%B9%E7%8C%B4%E8%85%B3%E6%9C%AC/%E5%B7%B4%E5%93%88%E5%95%8F%E7%AD%94.user.js
 // @downloadURL  https://raw.githubusercontent.com/Tzuoo/Tzuo/main/%E6%B2%B9%E7%8C%B4%E8%85%B3%E6%9C%AC/%E5%B7%B4%E5%93%88%E5%95%8F%E7%AD%94.user.js
 // @description  動畫瘋每日問答、簽到與雙倍巴幣，保留原有片頭片尾與跳集功能。
@@ -2364,7 +2364,7 @@ function createBahaDailyRewards(io) {
   function describe(record) {
     if (record.error) return record.error;
     if (record.state === "conflict") return "請先停用「巴哈自動簽到」擴充，再重新整理";
-    if (record.state === "awaiting-ad") return "已簽到；請依網站提示觀看廣告以領取雙倍巴幣";
+    if (record.state === "awaiting-ad") return "已簽到；正在依巴哈自動簽到擴充的方式領取雙倍巴幣";
     if (record.state === "deferred") return record.deferReason || "已簽到；正在等候廣告就緒，稍後會接續雙倍巴幣流程";
     if (record.state === "unconfirmed") return "已簽到；尚未確認廣告是否開始，請稍後查看網站或手動重試";
     if (record.signed === true && record.double === true) return "今日已簽到，雙倍巴幣已領取";
@@ -2388,9 +2388,11 @@ function createBahaDailyRewards(io) {
         await notice(scope, record, describe(record));
         return record;
       }
+      const newMethod = io.rewardMethod && record.rewardMethod !== io.rewardMethod &&
+        Number(record.rewardPendingUntil || 0) <= io.now();
       const resumeReward = !manual && record.autoAttempted && cfg.autoDouble &&
-        record.signed === true && record.double === false && !record.rewardAttempted &&
-        ["deferred", "checked"].includes(record.state);
+        record.signed === true && record.double === false && (newMethod ||
+          (!record.rewardAttempted && ["deferred", "checked"].includes(record.state)));
       if (!manual && record.autoAttempted && !resumeReward) return record;
       // A deferred preflight made no reward request. Resume only that stage;
       // keep polling inexpensive and never repeat a sign-in submission.
@@ -2428,15 +2430,16 @@ function createBahaDailyRewards(io) {
           } else if (io.rewardBusy() || !io.canStartReward()) {
             record.state = "deferred";
             record.deferReason = io.rewardBlockReason?.() || "已簽到；正在等候廣告就緒，稍後會接續雙倍巴幣流程";
-          } else if (!record.rewardAttempted || manual) {
-            // The site owns ad playback and reward completion; never simulate completion.
+          } else if (!record.rewardAttempted || manual || newMethod) {
+            // Use the selected reward method once, then verify with the server.
             record.rewardAttempted = true;
+            if (io.rewardMethod) record.rewardMethod = io.rewardMethod;
             record.rewardPendingUntil = io.now() + 10 * 60 * 1000;
             record.state = "awaiting-ad";
             await save(scope, record);
             await guard(scope);
             if (io.conflict()) throw new Error("偵測到另一個自動簽到擴充，已停止");
-            const outcome = await io.startReward();
+            const outcome = await io.startReward(() => guard(scope));
             await guard(scope);
             if ((outcome?.state === "failed" && outcome.definitive === true) || outcome === false) {
               record.rewardPendingUntil = 0;
@@ -2486,68 +2489,105 @@ function createBahaDailyRewards(io) {
   return { run, inspect, describe };
 }
 
-function createBahaRewardStarter({ page, document, Observer, setTimer, clearTimer }) {
-  const definiteErrors = new Set([
-    "發生錯誤，請稍後再嘗試(1)",
-    "由於擋廣告插件會影響播放器運作，如果您有安裝，請您將gamer.com.tw/bahamut.com.tw網域加入白名單或考慮關閉插件，巴哈姆特感謝您的支持！",
-    "由於擋廣告插件會影響播放器運作，如果您有安裝，請您將gamer.com.tw/bahamut.com.tw網域加入白名單或考慮關閉插件，福利社感謝您的支持！",
-    "目前無廣告可播，請稍後再試，或改用App版。了解更多"
-  ]);
-  const textOf = dialog => (dialog.querySelector(".dialogify__body")?.textContent ||
-    dialog.textContent || "").replace(/\s+/gu, "");
-  return () => new Promise(resolve => {
-    const baseline = new Map(Array.from(document.querySelectorAll("dialog.dialogify[open]"),
-      dialog => [dialog, textOf(dialog)]));
-    let done = false, timer, observer;
-    const finish = outcome => {
-      if (done) return;
-      done = true;
-      clearTimer(timer);
-      observer?.disconnect();
-      resolve(outcome);
+/*
+ * Reward method adapted from Brownsugar / Lay's BahaAutoSign 1.4.0.
+ * https://github.com/brownsugar/baha-auto-sign/blob/3f6849158844147bcfd2ead0d4f0ea2504562c19/src/js/webContent.ts
+ * The initialization, start delay, player handling and completion delay below
+ * follow that implementation. No extension login or telemetry is included.
+ *
+ * MIT License
+ *
+ * Copyright (c) 2022 Lay
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+function createBahaRewardStarter({ page, document, setTimer, clearTimer }) {
+  let installed = false, active = null;
+  function install() {
+    if (installed) return;
+    const ad = page.SigninAd, dialogs = page.Dialogify;
+    const confirm = dialogs.confirm, alert = dialogs.alert;
+    const videoByReward = ad.Player.videoByReward, loadingFail = ad.loadingFail;
+    dialogs.confirm = function (message, options) {
+      if (active && message === "是否觀看廣告？") return;
+      return confirm.call(dialogs, message, options);
     };
-    const inspect = () => {
-      for (const dialog of document.querySelectorAll("dialog.dialogify[open]")) {
-        const text = textOf(dialog);
-        if (!text || baseline.get(dialog) === text) continue;
-        if (text === "您今天已經得到過雙倍巴幣獎勵囉！") {
-          finish({ state: "already" }); return;
+    dialogs.alert = function (message) {
+      if (active && typeof message === "string") {
+        if (message.includes("觀看廣告完成")) {
+          active.finish({ state: "completed" }); return;
         }
-        if (text === "觀看廣告完成，獲得雙倍巴幣獎勵。") {
-          finish({ state: "completed" }); return;
-        }
-        if (/是否觀看廣告[？?]/u.test(text)) {
-          finish({ state: "started" }); return;
-        }
-        if (definiteErrors.has(text)) {
-          finish({
-            state: "failed", definitive: true,
-            message: "網站的獎勵廣告未能開始；請查看網站提示，確認此網站的廣告可以正常載入後手動重試"
-          });
-          return;
+        if (message === "您今天已經得到過雙倍巴幣獎勵囉！") {
+          active.finish({ state: "already" }); return;
         }
       }
+      return alert.call(dialogs, message);
     };
-    observer = new Observer(inspect);
-    observer.observe(document, { childList: true, subtree: true, attributes: true, attributeFilter: ["open"] });
-    timer = setTimer(() => finish({ state: "unconfirmed" }), 12000);
-    try {
-      page.SigninAd.initAd.call(page.SigninAd);
-    } catch {
-      finish({ state: "failed", definitive: true, message: "廣告初始化失敗；請確認網站廣告程式可以載入後手動重試" });
-      return;
-    }
-    try {
-      const result = page.SigninAd.startAd.call(page.SigninAd);
-      if (result === false) {
-        finish({ state: "failed", definitive: true, message: "網站尚未開始廣告，請查看錯誤提示後手動重試" });
-        return;
+    ad.Player.videoByReward = function () {
+      if (!active) return videoByReward.call(ad.Player);
+      const attempt = active;
+      try { videoByReward.call(ad.Player); }
+      catch { /* Same handling as BahaAutoSign when the ad SDK is blocked. */ }
+      finally {
+        document.querySelector(".dialogify__adsPopup")?.close();
+        setTimer(async () => {
+          if (active !== attempt) return;
+          try {
+            await attempt.guard();
+            if (typeof page.Signin.finishAd === "undefined") {
+              page.Signin.finishAd = () => ad.finishAd();
+            }
+            ad.setFinishAd();
+          } catch { attempt.finish({ state: "unconfirmed" }); }
+        }, 1300);
       }
-      inspect();
-    } catch {
-      // A synchronous start error does not prove its network request was unsent.
-      finish({ state: "unconfirmed" });
-    }
+    };
+    ad.loadingFail = function () {
+      if (!active && typeof loadingFail === "function") return loadingFail.call(ad);
+    };
+    installed = true;
+  }
+  return (guard = async () => {}) => new Promise(resolve => {
+    install();
+    let timeout;
+    const attempt = {
+      guard,
+      finish(outcome) {
+        if (active !== attempt) return;
+        clearTimer(timeout); active = null; resolve(outcome);
+      }
+    };
+    active = attempt;
+    timeout = setTimer(() => attempt.finish({ state: "unconfirmed" }), 15000);
+    // BahaAutoSign intentionally continues after initAd throws: the site's
+    // CSRF instance is created before its optional Google ad SDK is accessed.
+    try { page.SigninAd.initAd(); }
+    catch { /* Continue with the upstream 1000 ms start delay. */ }
+    setTimer(async () => {
+      if (active !== attempt) return;
+      try {
+        await guard();
+        if (page.SigninAd.startAd() === false) {
+          attempt.finish({ state: "failed", definitive: true, message: "網站未能開始領取，請查看網站訊息後手動重試" });
+        }
+      } catch { attempt.finish({ state: "unconfirmed" }); }
+    }, 1000);
   });
 }
 
@@ -2628,7 +2668,9 @@ function createBahaRewardStarter({ page, document, Observer, setTimer, clearTime
     day, scope, now: () => Date.now(), config: dailyConfig, notify: toast,
     ready: async () => {
       for (let i = 0; i < 30; i++) {
-        if (page.User?.Login && page.Signin?.checkSigninStatus && page.Signin?.signinWork) return;
+        if (page.User?.Login && page.Signin?.checkSigninStatus && page.Signin?.signinWork &&
+            page.SigninAd?.initAd && page.SigninAd?.startAd && page.SigninAd?.Player?.videoByReward &&
+            page.SigninAd?.setFinishAd && page.SigninAd?.finishAd && page.Dialogify?.confirm && page.Dialogify?.alert) return;
         await sleepDaily(500);
       }
       throw new Error("網站簽到程式尚未就緒，請重新整理");
@@ -2646,19 +2688,10 @@ function createBahaRewardStarter({ page, document, Observer, setTimer, clearTime
     conflict: () => !!document.querySelector("#baha-auto-sign"),
     status: () => withTimeout(() => page.Signin.checkSigninStatus.call(page.Signin)),
     sign: () => withTimeout(() => page.Signin.signinWork.call(page.Signin)),
-    rewardBusy: () => !!document.querySelector("dialog.dialogify__adsPopup[open]") ||
-      Array.from(document.querySelectorAll("video")).some(video => !video.paused && !video.ended),
-    canStartReward: () => document.visibilityState === "visible" &&
-      typeof page.SigninAd?.initAd === "function" &&
-      typeof page.SigninAd?.startAd === "function" &&
-      typeof page.googletag?.pubads === "function" &&
-      typeof page.Bahamut?.Csrf === "function",
-    rewardBlockReason: () => document.visibilityState !== "visible" ?
-      "已簽到；回到此分頁後會繼續雙倍流程" :
-      Array.from(document.querySelectorAll("video")).some(video => !video.paused && !video.ended) ?
-        "已簽到；影片暫停或結束後會繼續雙倍流程" :
-        "已簽到；獎勵廣告程式尚未載入，正在等待就緒",
-    startReward: createBahaRewardStarter({ page, document, Observer: MutationObserver,
+    rewardMethod: "baha-auto-sign-1.4.0",
+    rewardBusy: () => !!document.querySelector("dialog.dialogify__adsPopup[open]"),
+    canStartReward: () => true,
+    startReward: createBahaRewardStarter({ page, document,
       setTimer: setTimeout, clearTimer: clearTimeout })
   });
 
@@ -2673,7 +2706,7 @@ function createBahaRewardStarter({ page, document, Observer, setTimer, clearTime
     const cfg = dailyConfig(), inputs = {};
     for (const [key, text] of [
       ["autoSign", "進入動畫瘋時自動簽到"],
-      ["autoDouble", "每日最多自動開始一次雙倍巴幣廣告流程"],
+      ["autoDouble", "每日自動領取一次雙倍巴幣（巴哈自動簽到方式）"],
       ["dailyNotice", "每天最多顯示一次自動狀態提醒"]
     ]) {
       const label = document.createElement("label");
@@ -2683,7 +2716,7 @@ function createBahaRewardStarter({ page, document, Observer, setTimer, clearTime
       label.append(input, document.createTextNode(" " + text)); form.append(label);
     }
     const hint = document.createElement("p");
-    hint.textContent = "雙倍巴幣由網站確認廣告完成。未登入、播放影片中或廣告無法載入時，可從油猴選單稍後手動重試。";
+    hint.textContent = "雙倍領取沿用巴哈自動簽到擴充的流程；結果由網站狀態確認，失敗可從油猴選單手動重試。";
     hint.style.fontSize = "13px";
     const save = document.createElement("button");
     save.type = "submit"; save.textContent = "儲存";
@@ -2716,31 +2749,13 @@ function createBahaRewardStarter({ page, document, Observer, setTimer, clearTime
     });
   }
 
-  // Only a completed SITE message triggers a read-only server verification.
-  // No ad-completion callback, reward-finished endpoint, or player is replaced.
-  const seenDialogs = new WeakSet();
-  let checkQueued = false;
-  const verifyCompletedReward = () => {
-    if (checkQueued) return;
-    for (const dialog of document.querySelectorAll("dialog.dialogify[open]")) {
-      if (seenDialogs.has(dialog)) continue;
-      const text = (dialog.querySelector(".dialogify__body")?.textContent || "").replace(/\s+/gu, "");
-      if (!["觀看廣告完成，獲得雙倍巴幣獎勵。", "您今天已經得到過雙倍巴幣獎勵囉！"].includes(text)) continue;
-      seenDialogs.add(dialog); checkQueued = true;
-      controller.inspect().then(showRewardState).catch(() => {}).finally(() => { checkQueued = false; });
-      break;
-    }
-  };
-  new MutationObserver(verifyCompletedReward).observe(document, {
-    childList: true, subtree: true, attributes: true, attributeFilter: ["open"]
-  });
   const showRewardState = record => {
     document.getElementById("baha-daily-rewards-status")?.remove();
     if (!record?.signed || record.double === true || !dailyConfig().autoDouble) return;
     const button = document.createElement("button");
     button.id = "baha-daily-rewards-status";
     button.type = "button";
-    button.textContent = record.state === "awaiting-ad" ? "雙倍巴幣：等候廣告完成" :
+    button.textContent = record.state === "awaiting-ad" ? "雙倍巴幣：正在領取" :
       record.state === "deferred" ? "雙倍巴幣：等候廣告就緒（查看）" : "雙倍巴幣：尚未完成（查看）";
     button.style.cssText = "position:fixed;right:18px;bottom:18px;z-index:2147483646;padding:8px 12px;background:#25333b;color:white;border:1px solid #657782;border-radius:8px;font:13px/1.5 system-ui;cursor:pointer";
     button.addEventListener("click", async () => {
@@ -2753,34 +2768,17 @@ function createBahaRewardStarter({ page, document, Observer, setTimer, clearTime
     });
     document.body?.append(button);
   };
-  let resumeTimer = null, remainingReadyChecks = 30, runningDaily = null;
+  let runningDaily = null;
   function startDaily() {
     if (runningDaily) return runningDaily;
     runningDaily = controller.run().then(record => {
-      showRewardState(record);
-      if (record?.state === "deferred" && !record.rewardAttempted &&
-          document.visibilityState === "visible" && remainingReadyChecks > 0) {
-        remainingReadyChecks -= 1;
-        clearTimeout(resumeTimer);
-        resumeTimer = setTimeout(() => { resumeTimer = null; startDaily(); }, 1000);
-      }
-      return record;
+      showRewardState(record); return record;
     }).catch(() => {}).finally(() => { runningDaily = null; });
     return runningDaily;
   }
-  function wakeDaily() {
-    clearTimeout(resumeTimer); resumeTimer = null;
-    remainingReadyChecks = 30;
-    if (document.visibilityState === "visible") startDaily();
-  }
-  startDaily();
-  document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") wakeDaily();
-    else { clearTimeout(resumeTimer); resumeTimer = null; }
-  });
-  document.addEventListener("pause", wakeDaily, true);
-  document.addEventListener("ended", wakeDaily, true);
-
+  function wakeDaily() { startDaily(); }
+  // Same initial delay as BahaAutoSign 1.4.0; no ad-SDK polling or visibility gate.
+  setTimeout(startDaily, 3000);
 
 })();
 // </baha-daily-rewards-v1>

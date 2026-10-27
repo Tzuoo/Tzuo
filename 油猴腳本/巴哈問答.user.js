@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         巴哈問答
 // @namespace    https://tzuoo.github.io/Tzuo/
-// @version      1.8.1
+// @version      1.8.2
 // @updateURL    https://raw.githubusercontent.com/Tzuoo/Tzuo/main/%E6%B2%B9%E7%8C%B4%E8%85%B3%E6%9C%AC/%E5%B7%B4%E5%93%88%E5%95%8F%E7%AD%94.user.js
 // @downloadURL  https://raw.githubusercontent.com/Tzuoo/Tzuo/main/%E6%B2%B9%E7%8C%B4%E8%85%B3%E6%9C%AC/%E5%B7%B4%E5%93%88%E5%95%8F%E7%AD%94.user.js
 // @description  動畫瘋每日問答、簽到與雙倍巴幣，保留原有片頭片尾與跳集功能。
@@ -2365,7 +2365,8 @@ function createBahaDailyRewards(io) {
     if (record.error) return record.error;
     if (record.state === "conflict") return "請先停用「巴哈自動簽到」擴充，再重新整理";
     if (record.state === "awaiting-ad") return "已簽到；請依網站提示觀看廣告以領取雙倍巴幣";
-    if (record.state === "deferred") return "已簽到；請從油猴選單手動開始雙倍巴幣廣告";
+    if (record.state === "deferred") return record.deferReason || "已簽到；正在等候廣告就緒，稍後會接續雙倍巴幣流程";
+    if (record.state === "unconfirmed") return "已簽到；尚未確認廣告是否開始，請稍後查看網站或手動重試";
     if (record.signed === true && record.double === true) return "今日已簽到，雙倍巴幣已領取";
     if (record.signed === true) return "今日已簽到；雙倍巴幣尚未確認領取";
     return "今日尚未簽到";
@@ -2380,13 +2381,20 @@ function createBahaDailyRewards(io) {
     return io.lock(async () => {
       await guard(scope);
       let record = read(scope);
+      const pendingUnconfirmed = record.state === "unconfirmed" || !!record.error;
       if (io.conflict()) {
         record.state = "conflict";
         await save(scope, record);
         await notice(scope, record, describe(record));
         return record;
       }
-      if (!manual && record.autoAttempted) return record;
+      const resumeReward = !manual && record.autoAttempted && cfg.autoDouble &&
+        record.signed === true && record.double === false && !record.rewardAttempted &&
+        ["deferred", "checked"].includes(record.state);
+      if (!manual && record.autoAttempted && !resumeReward) return record;
+      // A deferred preflight made no reward request. Resume only that stage;
+      // keep polling inexpensive and never repeat a sign-in submission.
+      if (resumeReward && (io.rewardBusy() || !io.canStartReward())) return record;
       // Persist BEFORE any request. A failed attempt needs an explicit menu retry.
       record.autoAttempted = true;
       record.error = "";
@@ -2397,8 +2405,13 @@ function createBahaDailyRewards(io) {
         await guard(scope);
         Object.assign(record, status);
         if (!status.signed && (cfg.autoSign || manual)) {
+          if (resumeReward || (record.signAttempted && !manual)) {
+            throw new Error("簽到狀態已改變，未重複提交；請手動檢查");
+          }
           await guard(scope);
           if (io.conflict()) throw new Error("偵測到另一個自動簽到擴充，已停止");
+          record.signAttempted = true;
+          await save(scope, record);
           const result = await io.sign();
           if (result?.error) throw new Error("簽到提交未成功；請查看網站或手動重試");
           // A POST result alone is never treated as confirmation.
@@ -2411,9 +2424,10 @@ function createBahaDailyRewards(io) {
         if (record.signed && record.double !== true && (cfg.autoDouble || manual)) {
           if (record.double === null) throw new Error("網站未提供雙倍巴幣狀態，未開始廣告");
           if (Number(record.rewardPendingUntil || 0) > io.now()) {
-            record.state = "awaiting-ad";
+            record.state = pendingUnconfirmed ? "unconfirmed" : "awaiting-ad";
           } else if (io.rewardBusy() || !io.canStartReward()) {
             record.state = "deferred";
+            record.deferReason = io.rewardBlockReason?.() || "已簽到；正在等候廣告就緒，稍後會接續雙倍巴幣流程";
           } else if (!record.rewardAttempted || manual) {
             // The site owns ad playback and reward completion; never simulate completion.
             record.rewardAttempted = true;
@@ -2422,12 +2436,25 @@ function createBahaDailyRewards(io) {
             await save(scope, record);
             await guard(scope);
             if (io.conflict()) throw new Error("偵測到另一個自動簽到擴充，已停止");
-            await io.startReward();
+            const outcome = await io.startReward();
+            await guard(scope);
+            if ((outcome?.state === "failed" && outcome.definitive === true) || outcome === false) {
+              record.rewardPendingUntil = 0;
+              record.state = "error";
+              record.error = outcome?.message || "廣告未開始，請檢查網站訊息後手動重試";
+            } else if (["already", "completed"].includes(outcome?.state)) {
+              Object.assign(record, statusOf(await io.status()));
+              await guard(scope);
+              record.state = record.double === true ? "checked" : "unconfirmed";
+              if (record.double === true) record.rewardPendingUntil = 0;
+            } else if (outcome?.state !== "started") {
+              record.state = "unconfirmed";
+            }
           }
         }
       } catch (error) {
         await guard(scope); // Do not save results under a different account or day.
-        record.state = "error";
+        record.state = Number(record.rewardPendingUntil || 0) > io.now() ? "unconfirmed" : "error";
         record.error = String(error?.message || "簽到檢查失敗，請手動重試");
       }
       await save(scope, record);
@@ -2445,12 +2472,83 @@ function createBahaDailyRewards(io) {
       const record = read(scope);
       const status = statusOf(await io.status());
       await guard(scope);
-      Object.assign(record, status, { error: "", state: "checked" });
+      const unfinishedState = record.state;
+      Object.assign(record, status);
+      if (status.double === true || !status.signed) {
+        Object.assign(record, { error: "", state: "checked" });
+      } else {
+        record.state = ["deferred", "awaiting-ad", "unconfirmed", "error"].includes(unfinishedState) ? unfinishedState : "checked";
+      }
       if (status.double === true) record.rewardPendingUntil = 0;
       return save(scope, record);
     });
   }
   return { run, inspect, describe };
+}
+
+function createBahaRewardStarter({ page, document, Observer, setTimer, clearTimer }) {
+  const definiteErrors = new Set([
+    "發生錯誤，請稍後再嘗試(1)",
+    "由於擋廣告插件會影響播放器運作，如果您有安裝，請您將gamer.com.tw/bahamut.com.tw網域加入白名單或考慮關閉插件，巴哈姆特感謝您的支持！",
+    "由於擋廣告插件會影響播放器運作，如果您有安裝，請您將gamer.com.tw/bahamut.com.tw網域加入白名單或考慮關閉插件，福利社感謝您的支持！",
+    "目前無廣告可播，請稍後再試，或改用App版。了解更多"
+  ]);
+  const textOf = dialog => (dialog.querySelector(".dialogify__body")?.textContent ||
+    dialog.textContent || "").replace(/\s+/gu, "");
+  return () => new Promise(resolve => {
+    const baseline = new Map(Array.from(document.querySelectorAll("dialog.dialogify[open]"),
+      dialog => [dialog, textOf(dialog)]));
+    let done = false, timer, observer;
+    const finish = outcome => {
+      if (done) return;
+      done = true;
+      clearTimer(timer);
+      observer?.disconnect();
+      resolve(outcome);
+    };
+    const inspect = () => {
+      for (const dialog of document.querySelectorAll("dialog.dialogify[open]")) {
+        const text = textOf(dialog);
+        if (!text || baseline.get(dialog) === text) continue;
+        if (text === "您今天已經得到過雙倍巴幣獎勵囉！") {
+          finish({ state: "already" }); return;
+        }
+        if (text === "觀看廣告完成，獲得雙倍巴幣獎勵。") {
+          finish({ state: "completed" }); return;
+        }
+        if (/是否觀看廣告[？?]/u.test(text)) {
+          finish({ state: "started" }); return;
+        }
+        if (definiteErrors.has(text)) {
+          finish({
+            state: "failed", definitive: true,
+            message: "網站的獎勵廣告未能開始；請查看網站提示，確認此網站的廣告可以正常載入後手動重試"
+          });
+          return;
+        }
+      }
+    };
+    observer = new Observer(inspect);
+    observer.observe(document, { childList: true, subtree: true, attributes: true, attributeFilter: ["open"] });
+    timer = setTimer(() => finish({ state: "unconfirmed" }), 12000);
+    try {
+      page.SigninAd.initAd.call(page.SigninAd);
+    } catch {
+      finish({ state: "failed", definitive: true, message: "廣告初始化失敗；請確認網站廣告程式可以載入後手動重試" });
+      return;
+    }
+    try {
+      const result = page.SigninAd.startAd.call(page.SigninAd);
+      if (result === false) {
+        finish({ state: "failed", definitive: true, message: "網站尚未開始廣告，請查看錯誤提示後手動重試" });
+        return;
+      }
+      inspect();
+    } catch {
+      // A synchronous start error does not prove its network request was unsent.
+      finish({ state: "unconfirmed" });
+    }
+  });
 }
 
   const CONFIG = "bahaDailyRewards.config.v1";
@@ -2555,10 +2653,13 @@ function createBahaDailyRewards(io) {
       typeof page.SigninAd?.startAd === "function" &&
       typeof page.googletag?.pubads === "function" &&
       typeof page.Bahamut?.Csrf === "function",
-    startReward: () => {
-      page.SigninAd.initAd.call(page.SigninAd);
-      page.SigninAd.startAd.call(page.SigninAd);
-    }
+    rewardBlockReason: () => document.visibilityState !== "visible" ?
+      "已簽到；回到此分頁後會繼續雙倍流程" :
+      Array.from(document.querySelectorAll("video")).some(video => !video.paused && !video.ended) ?
+        "已簽到；影片暫停或結束後會繼續雙倍流程" :
+        "已簽到；獎勵廣告程式尚未載入，正在等待就緒",
+    startReward: createBahaRewardStarter({ page, document, Observer: MutationObserver,
+      setTimer: setTimeout, clearTimer: clearTimeout })
   });
 
   function showDailySettings() {
@@ -2594,7 +2695,7 @@ function createBahaDailyRewards(io) {
       event.preventDefault();
       try {
         writeValue(CONFIG, Object.fromEntries(Object.entries(inputs).map(([key, input]) => [key, input.checked])));
-        dialog.remove(); toast("已儲存；可從油猴選單手動執行簽到與雙倍流程");
+        dialog.remove(); toast("已儲存簽到與雙倍設定"); wakeDaily();
       } catch (error) { toast(error.message); }
     });
     dialog.addEventListener("close", () => dialog.remove());
@@ -2606,10 +2707,12 @@ function createBahaDailyRewards(io) {
   if (typeof GM_registerMenuCommand === "function") {
     GM_registerMenuCommand("簽到與雙倍巴幣設定", showDailySettings);
     GM_registerMenuCommand("查看今日簽到與雙倍巴幣狀態", async () => {
-      try { alert(explain(await controller.inspect())); } catch (error) { alert(error.message); }
+      try { const record = await controller.inspect(); showRewardState(record); alert(explain(record)); }
+      catch (error) { alert(error.message); }
     });
     GM_registerMenuCommand("簽到／開始雙倍廣告（手動重試）", async () => {
-      try { toast(explain(await controller.run({ manual: true }))); } catch (error) { toast(error.message); }
+      try { const record = await controller.run({ manual: true }); showRewardState(record); toast(explain(record)); }
+      catch (error) { toast(error.message); }
     });
   }
 
@@ -2624,18 +2727,59 @@ function createBahaDailyRewards(io) {
       const text = (dialog.querySelector(".dialogify__body")?.textContent || "").replace(/\s+/gu, "");
       if (!["觀看廣告完成，獲得雙倍巴幣獎勵。", "您今天已經得到過雙倍巴幣獎勵囉！"].includes(text)) continue;
       seenDialogs.add(dialog); checkQueued = true;
-      controller.inspect().catch(() => {}).finally(() => { checkQueued = false; });
+      controller.inspect().then(showRewardState).catch(() => {}).finally(() => { checkQueued = false; });
       break;
     }
   };
   new MutationObserver(verifyCompletedReward).observe(document, {
     childList: true, subtree: true, attributes: true, attributeFilter: ["open"]
   });
-  const startDaily = () => controller.run().catch(() => {});
+  const showRewardState = record => {
+    document.getElementById("baha-daily-rewards-status")?.remove();
+    if (!record?.signed || record.double === true || !dailyConfig().autoDouble) return;
+    const button = document.createElement("button");
+    button.id = "baha-daily-rewards-status";
+    button.type = "button";
+    button.textContent = record.state === "awaiting-ad" ? "雙倍巴幣：等候廣告完成" :
+      record.state === "deferred" ? "雙倍巴幣：等候廣告就緒（查看）" : "雙倍巴幣：尚未完成（查看）";
+    button.style.cssText = "position:fixed;right:18px;bottom:18px;z-index:2147483646;padding:8px 12px;background:#25333b;color:white;border:1px solid #657782;border-radius:8px;font:13px/1.5 system-ui;cursor:pointer";
+    button.addEventListener("click", async () => {
+      try {
+        const latest = await controller.inspect();
+        showRewardState(latest);
+        alert(explain(latest) + (latest.double === true ? "" : "\n\n可從油猴選單選擇「簽到／開始雙倍廣告（手動重試）」。"));
+      }
+      catch (error) { alert(error.message); }
+    });
+    document.body?.append(button);
+  };
+  let resumeTimer = null, remainingReadyChecks = 30, runningDaily = null;
+  function startDaily() {
+    if (runningDaily) return runningDaily;
+    runningDaily = controller.run().then(record => {
+      showRewardState(record);
+      if (record?.state === "deferred" && !record.rewardAttempted &&
+          document.visibilityState === "visible" && remainingReadyChecks > 0) {
+        remainingReadyChecks -= 1;
+        clearTimeout(resumeTimer);
+        resumeTimer = setTimeout(() => { resumeTimer = null; startDaily(); }, 1000);
+      }
+      return record;
+    }).catch(() => {}).finally(() => { runningDaily = null; });
+    return runningDaily;
+  }
+  function wakeDaily() {
+    clearTimeout(resumeTimer); resumeTimer = null;
+    remainingReadyChecks = 30;
+    if (document.visibilityState === "visible") startDaily();
+  }
   startDaily();
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") startDaily();
+    if (document.visibilityState === "visible") wakeDaily();
+    else { clearTimeout(resumeTimer); resumeTimer = null; }
   });
+  document.addEventListener("pause", wakeDaily, true);
+  document.addEventListener("ended", wakeDaily, true);
 
 
 })();

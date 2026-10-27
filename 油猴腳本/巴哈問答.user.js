@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         巴哈問答
 // @namespace    https://tzuoo.github.io/Tzuo/
-// @version      1.8.5
+// @version      1.8.6
 // @updateURL    https://raw.githubusercontent.com/Tzuoo/Tzuo/main/%E6%B2%B9%E7%8C%B4%E8%85%B3%E6%9C%AC/%E5%B7%B4%E5%93%88%E5%95%8F%E7%AD%94.user.js
 // @downloadURL  https://raw.githubusercontent.com/Tzuoo/Tzuo/main/%E6%B2%B9%E7%8C%B4%E8%85%B3%E6%9C%AC/%E5%B7%B4%E5%93%88%E5%95%8F%E7%AD%94.user.js
 // @description  動畫瘋每日問答、簽到與雙倍巴幣，保留原有片頭片尾與跳集功能。
@@ -775,9 +775,12 @@
   }
 
   async function showGamerQuizStatus() {
-    notify("正在查詢動畫瘋每日問答...");
-    const status = await getGamerQuizStatus({ refresh: true });
-    alert(describeGamerQuizStatus(status).join("\n"));
+    const [status, daily] = await Promise.all([
+      getGamerQuizStatus({ refresh: true }), dailyService.inspect()
+    ]);
+    const lines = describeGamerQuizStatus(status);
+    lines.splice(2, 0, formatDailyStatus(daily), "");
+    alert(lines.join("\n"));
   }
 
   function decodePercent(value) {
@@ -1999,9 +2002,15 @@
       check("影片自然結束後自動下一集", iJumpEnded)
     );
     form.append(
-      heading("動畫瘋每日問答"),
+      heading("動畫瘋每日功能"),
       check("自動答題（找不到可靠答案時阻止自動跳集）", iAutoQuiz)
     );
+    const dailyRetry = document.createElement("button");
+    dailyRetry.type = "button"; dailyRetry.textContent = "重試簽到／雙倍巴幣";
+    const dailyFeedback = document.createElement("small");
+    dailyFeedback.style.cssText = "display:block;margin-top:6px;line-height:1.5";
+    dailyRetry.addEventListener("click", () => retryDailyRewards(dailyRetry, dailyFeedback));
+    form.append(dailyRetry, dailyFeedback);
 
     const footer = document.createElement("footer");
     const save = document.createElement("button");
@@ -2318,6 +2327,241 @@
     };
   }
 
+  // <baha-daily-rewards-v2>
+  /*
+  Reward flow adapted from BahaAutoSign 1.4.0:
+  https://github.com/brownsugar/baha-auto-sign/blob/3f6849158844147bcfd2ead0d4f0ea2504562c19/src/js/webContent.ts
+
+  MIT License
+
+  Copyright (c) 2022 Lay
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in all
+  copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  SOFTWARE.
+
+  */
+  // daily-service-begin
+  function createBahaDailyService(io) {
+    const { page, document, setTimer, clearTimer } = io;
+    let running = null, installed = false, complete = null, rewardScope = null, receiptScope = null;
+    let state = { phase: "尚未檢查", signed: null, double: null, requests: {} };
+    const update = patch => { state = { ...state, ...patch }; };
+    const bool = value => value === true || value === 1 || value === "1";
+    const emit = result => { complete?.(result); };
+    async function guard(scope) {
+      if (await io.scope() !== scope) throw new Error("帳號或日期已變更，請重新整理");
+    }
+    async function bounded(action) {
+      let timer;
+      try {
+        return await Promise.race([Promise.resolve().then(action), new Promise((_, reject) => {
+          timer = setTimer(() => reject(new Error("網站回應逾時")), 20000);
+        })]);
+      } finally { clearTimer(timer); }
+    }
+    async function status() {
+      if (typeof page.Signin?.checkSigninStatus !== "function") throw new Error("缺少網站元件：Signin.checkSigninStatus");
+      const result = await bounded(() => page.Signin.checkSigninStatus());
+      if (result?.error || !result?.data || ![true,false,0,1,"0","1"].includes(result.data.signin)) {
+        throw new Error("網站未能確認簽到狀態");
+      }
+      const known = [true,false,0,1,"0","1"].includes(result.data.finishedAd);
+      return { signed: bool(result.data.signin), double: known ? bool(result.data.finishedAd) : null,
+        statusDouble: known ? bool(result.data.finishedAd) : null };
+    }
+    function installReward() {
+      if (installed) return;
+      const ad = page.SigninAd, dialogs = page.Dialogify;
+      for (const [name, fn] of [["SigninAd.initAd",ad?.initAd],["SigninAd.startAd",ad?.startAd],
+        ["SigninAd.Player.videoByReward",ad?.Player?.videoByReward],["SigninAd.setFinishAd",ad?.setFinishAd],
+        ["SigninAd.finishAd",ad?.finishAd],["Dialogify.confirm",dialogs?.confirm],["Dialogify.alert",dialogs?.alert]]) {
+        if (typeof fn !== "function") throw new Error("缺少網站元件：" + name);
+      }
+      // BahaAutoSign 1.4.0: keep its reward flow for the page lifetime, including
+      // late callbacks. A result timeout never disables the underlying method.
+      const confirm = dialogs.confirm, alert = dialogs.alert, videoByReward = ad.Player.videoByReward;
+      dialogs.confirm = function (message, options) {
+        if (message !== "是否觀看廣告？") return confirm.call(dialogs, message, options);
+      };
+      dialogs.alert = function (message) {
+        if (typeof message === "string" && message.includes("觀看廣告完成")) {
+          emit({ receipt: "completed" }); return;
+        }
+        if (message === "您今天已經得到過雙倍巴幣獎勵囉！") {
+          emit({ receipt: "already" }); return;
+        }
+        return alert.call(dialogs, message);
+      };
+      ad.Player.videoByReward = function () {
+        update({ phase: "執行擴充的領取完成處理" });
+        const scope = rewardScope;
+        try { videoByReward.call(ad.Player); }
+        catch { /* Upstream continues when the ad SDK cannot be used. */ }
+        finally {
+          document.querySelector(".dialogify__adsPopup")?.close();
+          setTimer(async () => {
+            try {
+              await guard(scope);
+              if (typeof page.Signin.finishAd === "undefined") page.Signin.finishAd = () => ad.finishAd();
+              update({ phase: "已呼叫網站完成領取，等待回應" });
+              ad.setFinishAd();
+            } catch (error) { emit({ error: error.message }); }
+          }, 1300);
+        }
+      };
+      ad.loadingFail = () => {};
+      // Observe only the two requests made by the original method. Store no URL
+      // parameters, headers, cookies, account IDs or raw response bodies.
+      if (typeof page.jQuery === "function") page.jQuery(document).on("ajaxComplete.bahaDaily184", (_event, xhr, request) => {
+        const path = String(request.url || "").split("?")[0];
+        const kind = path.endsWith("/sign_in_ad_start.php") ? "start" : path.endsWith("/sign_in_ad_finished.php") ? "finish" : null;
+        if (!kind) return;
+        const data = xhr.responseJSON;
+        const item = { http: Number(xhr.status || 0), finished: [0,1,"0","1"].includes(data?.data?.finished) ? Number(data.data.finished) : null,
+          errorCode: /^[\w-]{1,30}$/u.test(String(data?.error?.code ?? "")) ? String(data.error.code) : null };
+        update({ requests: { ...state.requests, [kind]: item } });
+        if (item.http < 200 || item.http >= 300 || data?.error) emit({ error: "網站" + (kind === "start" ? "開始" : "完成") + "領取請求失敗（HTTP " + item.http + (item.errorCode ? "，代碼 " + item.errorCode : "") + "）" });
+        else if (kind === "start" && item.finished === 1) emit({ receipt: "already" });
+        else if (kind === "finish" && item.finished === 0) emit({ error: "網站完成領取回應 finished=0，尚未發放雙倍巴幣" });
+      });
+      installed = true;
+    }
+    async function reward(scope) {
+      installReward(); rewardScope = scope;
+      let timer;
+      const result = new Promise(resolve => {
+        complete = resolve;
+        timer = setTimer(() => resolve({ error: "領取流程未收到完成確認；最後步驟：" + state.phase }), 15000);
+      });
+      update({ phase: "初始化擴充領取流程" });
+      try { page.SigninAd.initAd(); }
+      catch { /* The original extension proceeds after initialization errors. */ }
+      setTimer(async () => {
+        try {
+          await guard(scope); update({ phase: "已呼叫網站開始領取，等待回應" });
+          if (page.SigninAd.startAd() === false) emit({ error: "網站 startAd 回傳 false，領取未開始" });
+        } catch (error) { emit({ error: error.message }); }
+      }, 1000);
+      try { return await result; }
+      finally { clearTimer(timer); complete = null; }
+    }
+    async function execute() {
+      state = { phase: "檢查網站狀態", signed: null, double: null, statusDouble: null, receipt: null, requests: {} };
+      receiptScope = null;
+      const scope = await io.scope();
+      if (!scope) { update({ phase: "尚未登入" }); return state; }
+      return io.lock(async () => {
+        try {
+          await guard(scope);
+          if (document.querySelector("#baha-auto-sign")) throw new Error("舊巴哈自動簽到擴充仍在此分頁執行，請停用後重新整理");
+          update(await status()); await guard(scope);
+          if (!state.signed) {
+            update({ phase: "提交每日簽到" });
+            const response = await bounded(() => page.Signin.signinWork());
+            if (response?.error) throw new Error("網站拒絕每日簽到");
+            update(await status()); await guard(scope);
+            if (!state.signed) throw new Error("提交後網站仍未確認簽到");
+          }
+          if (state.signed && state.double === null) throw new Error("網站未提供雙倍巴幣狀態，未執行領取");
+          if (state.signed && state.double === false) {
+            const outcome = await reward(scope);
+            await guard(scope);
+            if (outcome.receipt) {
+              // The original method treats its own already/completed response as
+              // final. A different signin.php flag must not overwrite that result.
+              receiptScope = scope; update({ double: true, receipt: outcome.receipt });
+            } else {
+              update(await status()); await guard(scope);
+              if (state.double !== true) throw new Error(outcome.error || "網站仍顯示雙倍巴幣未領取");
+            }
+          }
+          update({ phase: describe(), error: false });
+        } catch (error) {
+          update({ phase: String(error.message || error), error: true });
+        }
+        // Only confirmed success gets a transient notification. A failed attempt
+        // consumes neither the daily success notice nor the ability to retry.
+        if (!state.error && state.signed && state.double) io.noticeOnce(scope, "今日簽到與雙倍巴幣已完成");
+        return state;
+      });
+    }
+    function run() {
+      if (running) return running;
+      running = execute().catch(error => { update({ phase: String(error.message || error), error: true }); return state; })
+        .finally(() => { running = null; });
+      return running;
+    }
+    function describe() {
+      if (state.receipt === "already") return "領取介面回覆：今天已領過雙倍巴幣";
+      if (state.receipt === "completed") return "領取介面回覆：雙倍巴幣領取完成";
+      return state.double === true ? "今日已簽到，雙倍巴幣已領取" : state.signed ? "今日已簽到，雙倍巴幣尚未領取" : "今日尚未簽到";
+    }
+    async function inspect() {
+      try {
+        const scope = await io.scope(), latest = await status(); await guard(scope);
+        const keep = receiptScope === scope && !!state.receipt;
+        update({ ...latest, double: keep ? true : latest.double, receipt: keep ? state.receipt : null, error: false });
+        update({ phase: describe() });
+      }
+      catch (error) { update({ phase: error.message, error: true }); }
+      return state;
+    }
+    return { run, inspect, getState: () => state };
+  }
+  // daily-service-end
+
+  const dailyPage = typeof unsafeWindow === "object" ? unsafeWindow : window;
+  const DAILY_SUCCESS_NOTICES = "bahaDailyRewards.successNotice.v1";
+  async function dailyScope() {
+    const id = dailyPage.User?.Login?.getUserid?.();
+    if (!id) return null;
+    const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(id));
+    return taipeiDateKey() + ":" + Array.from(new Uint8Array(hash), n => n.toString(16).padStart(2,"0")).join("");
+  }
+  const dailyService = createBahaDailyService({ page: dailyPage, document, setTimer: setTimeout, clearTimer: clearTimeout,
+    scope: dailyScope,
+    lock: action => {
+      if (!navigator.locks?.request) throw new Error("瀏覽器缺少分頁鎖，未執行重複領取");
+      return navigator.locks.request("baha-daily-rewards.single-flow.v2", { mode: "exclusive" }, action);
+    },
+    noticeOnce(key, text) {
+      const all = JSON.parse(localStorage.getItem(DAILY_SUCCESS_NOTICES) || "{}");
+      if (all[key]) return;
+      all[key] = true;
+      localStorage.setItem(DAILY_SUCCESS_NOTICES, JSON.stringify(Object.fromEntries(Object.entries(all).sort(([a],[b]) => a.localeCompare(b)).slice(-14))));
+      notify(text, 4000);
+    }
+  });
+  function formatDailyStatus(state) {
+    const signed = state.signed === true ? "已完成" : state.signed === false ? "未完成" : "待確認";
+    const reward = state.double === true ? "已領取" : state.double === false ? "未領取" : "待確認";
+    return "簽到：" + signed + "｜雙倍巴幣：" + reward;
+  }
+  async function retryDailyRewards(button, feedback) {
+    button.disabled = true; feedback.textContent = "處理中…";
+    try {
+      const state = await dailyService.run();
+      feedback.textContent = state.error ? "未完成：" + state.phase : formatDailyStatus(state);
+    } finally { button.disabled = false; }
+  }
+  setTimeout(() => dailyService.run(), 3000);
+  // </baha-daily-rewards-v2>
+
   registerMenus();
   wireHotkeys();
   wireAgePrompt();
@@ -2325,288 +2569,3 @@
   ensureGamerQuizAnswered().catch(() => {});
   restoreViewingMode();
 })();
-
-
-// <baha-daily-rewards-v2>
-(function () {
-  "use strict";
-/*
-Reward flow adapted from BahaAutoSign 1.4.0:
-https://github.com/brownsugar/baha-auto-sign/blob/3f6849158844147bcfd2ead0d4f0ea2504562c19/src/js/webContent.ts
-
-MIT License
-
-Copyright (c) 2022 Lay
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-
-*/
-// daily-service-begin
-function createBahaDailyService(io) {
-  const { page, document, setTimer, clearTimer } = io;
-  let running = null, installed = false, complete = null, rewardScope = null, receiptScope = null;
-  let state = { phase: "尚未檢查", signed: null, double: null, requests: {} };
-  const update = patch => { state = { ...state, ...patch }; io.render(state); };
-  const bool = value => value === true || value === 1 || value === "1";
-  const emit = result => { complete?.(result); };
-  async function guard(scope) {
-    if (await io.scope() !== scope) throw new Error("帳號或日期已變更，請重新整理");
-  }
-  async function bounded(action) {
-    let timer;
-    try {
-      return await Promise.race([Promise.resolve().then(action), new Promise((_, reject) => {
-        timer = setTimer(() => reject(new Error("網站回應逾時")), 20000);
-      })]);
-    } finally { clearTimer(timer); }
-  }
-  async function status() {
-    if (typeof page.Signin?.checkSigninStatus !== "function") throw new Error("缺少網站元件：Signin.checkSigninStatus");
-    const result = await bounded(() => page.Signin.checkSigninStatus());
-    if (result?.error || !result?.data || ![true,false,0,1,"0","1"].includes(result.data.signin)) {
-      throw new Error("網站未能確認簽到狀態");
-    }
-    const known = [true,false,0,1,"0","1"].includes(result.data.finishedAd);
-    return { signed: bool(result.data.signin), double: known ? bool(result.data.finishedAd) : null,
-      statusDouble: known ? bool(result.data.finishedAd) : null };
-  }
-  function installReward() {
-    if (installed) return;
-    const ad = page.SigninAd, dialogs = page.Dialogify;
-    for (const [name, fn] of [["SigninAd.initAd",ad?.initAd],["SigninAd.startAd",ad?.startAd],
-      ["SigninAd.Player.videoByReward",ad?.Player?.videoByReward],["SigninAd.setFinishAd",ad?.setFinishAd],
-      ["SigninAd.finishAd",ad?.finishAd],["Dialogify.confirm",dialogs?.confirm],["Dialogify.alert",dialogs?.alert]]) {
-      if (typeof fn !== "function") throw new Error("缺少網站元件：" + name);
-    }
-    // BahaAutoSign 1.4.0: keep its reward flow for the page lifetime, including
-    // late callbacks. A result timeout never disables the underlying method.
-    const confirm = dialogs.confirm, alert = dialogs.alert, videoByReward = ad.Player.videoByReward;
-    dialogs.confirm = function (message, options) {
-      if (message !== "是否觀看廣告？") return confirm.call(dialogs, message, options);
-    };
-    dialogs.alert = function (message) {
-      if (typeof message === "string" && message.includes("觀看廣告完成")) {
-        emit({ receipt: "completed" }); return;
-      }
-      if (message === "您今天已經得到過雙倍巴幣獎勵囉！") {
-        emit({ receipt: "already" }); return;
-      }
-      return alert.call(dialogs, message);
-    };
-    ad.Player.videoByReward = function () {
-      update({ phase: "執行擴充的領取完成處理" });
-      const scope = rewardScope;
-      try { videoByReward.call(ad.Player); }
-      catch { /* Upstream continues when the ad SDK cannot be used. */ }
-      finally {
-        document.querySelector(".dialogify__adsPopup")?.close();
-        setTimer(async () => {
-          try {
-            await guard(scope);
-            if (typeof page.Signin.finishAd === "undefined") page.Signin.finishAd = () => ad.finishAd();
-            update({ phase: "已呼叫網站完成領取，等待回應" });
-            ad.setFinishAd();
-          } catch (error) { emit({ error: error.message }); }
-        }, 1300);
-      }
-    };
-    ad.loadingFail = () => {};
-    // Observe only the two requests made by the original method. Store no URL
-    // parameters, headers, cookies, account IDs or raw response bodies.
-    if (typeof page.jQuery === "function") page.jQuery(document).on("ajaxComplete.bahaDaily184", (_event, xhr, request) => {
-      const path = String(request.url || "").split("?")[0];
-      const kind = path.endsWith("/sign_in_ad_start.php") ? "start" : path.endsWith("/sign_in_ad_finished.php") ? "finish" : null;
-      if (!kind) return;
-      const data = xhr.responseJSON;
-      const item = { http: Number(xhr.status || 0), finished: [0,1,"0","1"].includes(data?.data?.finished) ? Number(data.data.finished) : null,
-        errorCode: /^[\w-]{1,30}$/u.test(String(data?.error?.code ?? "")) ? String(data.error.code) : null };
-      update({ requests: { ...state.requests, [kind]: item } });
-      if (item.http < 200 || item.http >= 300 || data?.error) emit({ error: "網站" + (kind === "start" ? "開始" : "完成") + "領取請求失敗（HTTP " + item.http + (item.errorCode ? "，代碼 " + item.errorCode : "") + "）" });
-      else if (kind === "start" && item.finished === 1) emit({ receipt: "already" });
-      else if (kind === "finish" && item.finished === 0) emit({ error: "網站完成領取回應 finished=0，尚未發放雙倍巴幣" });
-    });
-    installed = true;
-  }
-  async function reward(scope) {
-    installReward(); rewardScope = scope;
-    let timer;
-    const result = new Promise(resolve => {
-      complete = resolve;
-      timer = setTimer(() => resolve({ error: "領取流程未收到完成確認；最後步驟：" + state.phase }), 15000);
-    });
-    update({ phase: "初始化擴充領取流程" });
-    try { page.SigninAd.initAd(); }
-    catch { /* The original extension proceeds after initialization errors. */ }
-    setTimer(async () => {
-      try {
-        await guard(scope); update({ phase: "已呼叫網站開始領取，等待回應" });
-        if (page.SigninAd.startAd() === false) emit({ error: "網站 startAd 回傳 false，領取未開始" });
-      } catch (error) { emit({ error: error.message }); }
-    }, 1000);
-    try { return await result; }
-    finally { clearTimer(timer); complete = null; }
-  }
-  async function execute(manual) {
-    state = { phase: "檢查網站狀態", signed: null, double: null, statusDouble: null, receipt: null, requests: {} };
-    receiptScope = null; io.render(state);
-    const scope = await io.scope();
-    if (!scope) { update({ phase: "尚未登入" }); return state; }
-    return io.lock(async () => {
-      try {
-        await guard(scope);
-        const cfg = io.config();
-        if (!manual && !cfg.autoSign && !cfg.autoDouble) { update({ phase: "已關閉自動簽到與雙倍領取" }); return state; }
-        if (document.querySelector("#baha-auto-sign")) throw new Error("舊巴哈自動簽到擴充仍在此分頁執行，請停用後重新整理");
-        update(await status()); await guard(scope);
-        if (!state.signed && (manual || cfg.autoSign)) {
-          update({ phase: "提交每日簽到" });
-          const response = await bounded(() => page.Signin.signinWork());
-          if (response?.error) throw new Error("網站拒絕每日簽到");
-          update(await status()); await guard(scope);
-          if (!state.signed) throw new Error("提交後網站仍未確認簽到");
-        }
-        if (state.signed && state.double === null && (manual || cfg.autoDouble)) throw new Error("網站未提供雙倍巴幣狀態，未執行領取");
-        if (state.signed && state.double === false && (manual || cfg.autoDouble)) {
-          const outcome = await reward(scope);
-          await guard(scope);
-          if (outcome.receipt) {
-            // The original method treats its own already/completed response as
-            // final. A different signin.php flag must not overwrite that result.
-            receiptScope = scope; update({ double: true, receipt: outcome.receipt });
-          } else {
-            update(await status()); await guard(scope);
-            if (state.double !== true) throw new Error(outcome.error || "網站仍顯示雙倍巴幣未領取");
-          }
-        }
-        update({ phase: describe(), error: false });
-      } catch (error) {
-        update({ phase: String(error.message || error), error: true });
-      }
-      // Notification deduplication is separate from execution. An unsuccessful
-      // attempt is never persisted as a reason to skip the next page or retry.
-      if (manual) io.notify(state.phase);
-      else if (io.config().dailyNotice) io.noticeOnce(scope, state.phase);
-      return state;
-    });
-  }
-  function run({ manual = false } = {}) {
-    if (running) return running;
-    running = execute(manual).catch(error => { update({ phase: String(error.message || error), error: true }); return state; })
-      .finally(() => { running = null; });
-    return running;
-  }
-  function describe() {
-    if (state.receipt === "already") return "領取介面回覆：今天已領過雙倍巴幣";
-    if (state.receipt === "completed") return "領取介面回覆：雙倍巴幣領取完成";
-    return state.double === true ? "今日已簽到，雙倍巴幣已領取" : state.signed ? "今日已簽到，雙倍巴幣尚未領取" : "今日尚未簽到";
-  }
-  async function inspect() {
-    try {
-      const scope = await io.scope(), latest = await status(); await guard(scope);
-      const keep = receiptScope === scope && !!state.receipt;
-      update({ ...latest, double: keep ? true : latest.double, receipt: keep ? state.receipt : null, error: false });
-      update({ phase: describe() });
-    }
-    catch (error) { update({ phase: error.message, error: true }); }
-    return state;
-  }
-  return { run, inspect, getState: () => state };
-}
-// daily-service-end
-
-  const page = typeof unsafeWindow === "object" ? unsafeWindow : window;
-  const CONFIG = "bahaDailyRewards.config.v1";
-  const NOTICES = "bahaDailyRewards.notices.v2";
-  const config = () => ({ autoSign: true, autoDouble: true, dailyNotice: true, ...GM_getValue(CONFIG, {}) });
-  async function scope() {
-    const id = page.User?.Login?.getUserid?.();
-    if (!id) return null;
-    const parts = new Intl.DateTimeFormat("en", { timeZone: "Asia/Taipei", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
-    const part = key => parts.find(p => p.type === key).value;
-    const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(id));
-    return part("year") + "-" + part("month") + "-" + part("day") + ":" + Array.from(new Uint8Array(hash), n => n.toString(16).padStart(2,"0")).join("");
-  }
-  function notify(text) {
-    document.getElementById("baha-daily-rewards-toast")?.remove();
-    const box = document.createElement("div"); box.id = "baha-daily-rewards-toast";
-    box.textContent = text; box.style.cssText = "position:fixed;right:18px;bottom:85px;z-index:2147483647;max-width:420px;padding:12px;background:#25333b;color:white;border-radius:8px;font:14px/1.6 system-ui";
-    document.body?.append(box); setTimeout(() => box.remove(), 6500);
-  }
-  function showDetails() {
-    const state = service.getState();
-    alert("巴哈問答 1.8.5\n" + state.phase + "\n簽到：" + state.signed + "；領取判定：" + (state.receipt || state.double) +
-      "\n簽到查詢 finishedAd：" + state.statusDouble +
-      "\n\n領取回應（沒有帳號或憑證）：\n" + JSON.stringify(state.requests, null, 2));
-  }
-  function render(state) {
-    let panel = document.getElementById("baha-daily-rewards-status");
-    if (!panel) {
-      panel = document.createElement("div"); panel.id = "baha-daily-rewards-status";
-      panel.setAttribute("data-baha-version", "1.8.5");
-      panel.style.cssText = "position:fixed;right:18px;bottom:18px;z-index:2147483646;max-width:420px;padding:9px 12px;background:#25333b;color:white;border:1px solid #657782;border-radius:8px;font:13px/1.5 system-ui";
-      const text = document.createElement("div"); text.id = "baha-daily-rewards-phase";
-      const detail = document.createElement("button"); detail.textContent = "查看狀態（1.8.5）"; detail.addEventListener("click", showDetails);
-      const retry = document.createElement("button"); retry.textContent = "重新領取";
-      retry.addEventListener("click", () => service.run({ manual: true }));
-      panel.append(text, detail, retry); document.body?.append(panel);
-    }
-    const text = document.getElementById("baha-daily-rewards-phase");
-    if (text) text.textContent = state.phase;
-  }
-  const service = createBahaDailyService({ page, document, setTimer: setTimeout, clearTimer: clearTimeout,
-    scope, config, notify, render,
-    lock: action => {
-      if (!navigator.locks?.request) throw new Error("瀏覽器缺少分頁鎖，未執行重複領取");
-      return navigator.locks.request("baha-daily-rewards.single-flow.v2", { mode: "exclusive" }, action);
-    },
-    noticeOnce(key, text) {
-      const all = JSON.parse(localStorage.getItem(NOTICES) || "{}");
-      if (all[key]) return;
-      all[key] = true;
-      localStorage.setItem(NOTICES, JSON.stringify(Object.fromEntries(Object.entries(all).sort(([a],[b]) => a.localeCompare(b)).slice(-14))));
-      notify(text);
-    }
-  });
-  function settings() {
-    document.getElementById("baha-daily-rewards-settings")?.remove();
-    const dialog = document.createElement("dialog"); dialog.id = "baha-daily-rewards-settings";
-    dialog.style.cssText = "padding:22px;border-radius:10px;background:#25333b;color:white;font:15px/1.8 system-ui";
-    const form = document.createElement("form"), cfg = config(), inputs = {};
-    for (const [key, label] of [["autoSign","自動每日簽到"],["autoDouble","使用巴哈自動簽到方式領取雙倍巴幣"],["dailyNotice","每天最多提醒一次"]]) {
-      const row = document.createElement("label"), input = document.createElement("input");
-      row.style.display = "block"; input.type = "checkbox"; input.checked = !!cfg[key]; inputs[key] = input;
-      row.append(input, document.createTextNode(label)); form.append(row);
-    }
-    const save = document.createElement("button"); save.type = "submit"; save.textContent = "儲存";
-    const cancel = document.createElement("button"); cancel.type = "button"; cancel.textContent = "關閉";
-    cancel.addEventListener("click", () => dialog.remove()); form.append(save, cancel);
-    form.addEventListener("submit", event => {
-      event.preventDefault(); GM_setValue(CONFIG, Object.fromEntries(Object.entries(inputs).map(([key, el]) => [key, el.checked])));
-      dialog.remove(); service.run();
-    });
-    dialog.append(form); document.body.append(dialog); dialog.showModal();
-  }
-  GM_registerMenuCommand("簽到與雙倍巴幣設定", settings);
-  GM_registerMenuCommand("查看今日簽到與雙倍巴幣狀態", async () => { await service.inspect(); showDetails(); });
-  GM_registerMenuCommand("簽到／領取雙倍巴幣（手動重試）", () => service.run({ manual: true }));
-  // The sole automatic entry point, matching the extension's initial delay.
-  setTimeout(() => service.run(), 3000);
-
-})();
-// </baha-daily-rewards-v2>
